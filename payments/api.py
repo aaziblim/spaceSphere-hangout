@@ -102,7 +102,6 @@ def verify_transaction_with_paystack(reference):
 # API ENDPOINTS
 # =============================================================================
 
-@csrf_exempt
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def initialize_payment(request):
@@ -172,7 +171,6 @@ def initialize_payment(request):
     })
 
 
-@csrf_exempt
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
 def verify_payment(request, reference):
@@ -196,11 +194,15 @@ def verify_payment(request, reference):
             'payment': serializer.data
         })
     
-    # Verify with Paystack (in test mode, we'll simulate success)
-    # In production: success, paystack_data = verify_transaction_with_paystack(reference)
-    
-    # For demo/testing: automatically mark as success
-    paystack_reference = request.data.get('paystack_reference', f'PS_{reference}')
+    # Verify with Paystack in production by default
+    if getattr(settings, 'PAYSTACK_VERIFY', not settings.DEBUG):
+        success, paystack_data = verify_transaction_with_paystack(reference)
+        if not success:
+            return Response({'error': 'Payment verification failed', 'details': paystack_data}, status=status.HTTP_400_BAD_REQUEST)
+        paystack_reference = paystack_data.get('id') or paystack_data.get('reference') or reference
+    else:
+        # For demo/testing: automatically mark as success
+        paystack_reference = request.data.get('paystack_reference', f'PS_{reference}')
     
     # Mark payment as successful
     payment.mark_success(paystack_reference)
@@ -313,9 +315,10 @@ def paystack_webhook(request):
     - subscription.create: Subscription created
     - subscription.disable: Subscription cancelled
     """
-    # Verify signature (skip in test mode for easier testing)
-    # if not verify_paystack_signature(request):
-    #     return HttpResponse(status=400)
+    # Verify signature (enabled by default in production)
+    if getattr(settings, 'PAYSTACK_WEBHOOK_VERIFY', not settings.DEBUG):
+        if not verify_paystack_signature(request):
+            return HttpResponse(status=400)
     
     try:
         event = request.data.get('event')

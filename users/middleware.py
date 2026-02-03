@@ -7,9 +7,10 @@ from channels.db import database_sync_to_async
 from channels.middleware import BaseMiddleware
 from django.contrib.auth.models import AnonymousUser
 from django.contrib.auth import get_user_model
+from django.http import HttpResponseForbidden
+from django.conf import settings
 from urllib.parse import parse_qs
 import jwt
-from django.conf import settings
 
 User = get_user_model()
 
@@ -49,3 +50,26 @@ class JWTAuthMiddleware(BaseMiddleware):
             scope['user'] = AnonymousUser()
 
         return await super().__call__(scope, receive, send)
+
+
+class AdminIPAllowlistMiddleware:
+    """Restrict /admin/ access to allowed IPs (e.g., Tailscale)."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        if settings.ADMIN_IP_RESTRICT and request.path.startswith('/admin/'):
+            client_ip = self._get_client_ip(request)
+            if client_ip not in getattr(settings, 'ADMIN_ALLOWED_IPS', []):
+                return HttpResponseForbidden('Admin access restricted.')
+        return self.get_response(request)
+
+    def _get_client_ip(self, request):
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded_for:
+            return x_forwarded_for.split(',')[0].strip()
+        x_real_ip = request.META.get('HTTP_X_REAL_IP')
+        if x_real_ip:
+            return x_real_ip.strip()
+        return request.META.get('REMOTE_ADDR', '')

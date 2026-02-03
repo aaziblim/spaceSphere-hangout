@@ -356,9 +356,12 @@ def trending_posts_view(request):
     limit = min(int(request.query_params.get('limit', 20)), 50)
     now = timezone.now()
     
-    # Get all posts with annotations
+    # Limit candidates for scalability (recent and engaged posts)
+    recent_window_days = int(request.query_params.get('window_days', 7))
+    cutoff = now - timezone.timedelta(days=recent_window_days)
+
     posts = (
-        Post.objects.all()
+        Post.objects.filter(date_posted__gte=cutoff)
         .select_related('author', 'author__profile')
         .prefetch_related('likes', 'dislikes')
         .annotate(
@@ -366,10 +369,11 @@ def trending_posts_view(request):
             dislikes_count=Count('dislikes', distinct=True),
             comments_count=Count('comments', distinct=True),
         )
+        .order_by('-date_posted')
     )
     
     # Calculate trending scores and sort
-    scored = [(p, calculate_trending_score(p, now)) for p in posts]
+    scored = [(p, calculate_trending_score(p, now)) for p in posts[:500]]
     scored.sort(key=lambda x: x[1], reverse=True)
     
     # Get top trending
@@ -390,11 +394,10 @@ def increment_post_views(request, slug):
     Increment view count for a post.
     Called when a user views the post detail.
     """
-    try:
-        Post.objects.filter(slug=slug).update(views_count=F('views_count') + 1)
+    updated = Post.objects.filter(slug=slug).update(views_count=F('views_count') + 1)
+    if updated:
         return Response({'status': 'ok'})
-    except Exception:
-        return Response({'error': 'Post not found'}, status=status.HTTP_404_NOT_FOUND)
+    return Response({'error': 'Post not found'}, status=status.HTTP_404_NOT_FOUND)
 
 class CommentSerializer(serializers.ModelSerializer):
     author = AuthorSerializer(read_only=True)

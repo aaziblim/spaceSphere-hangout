@@ -15,21 +15,6 @@ from django.http import JsonResponse
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
 
 
-from django.contrib.sites.models import Site
-from django.db import IntegrityError
-from django.db.utils import ProgrammingError, OperationalError
-
-# Configure default site - wrapped to handle fresh DB (migrations not yet run)
-try:
-    site, created = Site.objects.get_or_create(id=1)
-    site.domain = 'my-project-latest.onrender.com'
-    site.name = 'Spherespace'
-    site.save()
-except (IntegrityError, ProgrammingError, OperationalError) as e:
-    # ProgrammingError/OperationalError = table doesn't exist yet (fresh Docker DB)
-    # IntegrityError = site already exists
-    pass
-
 
 router = DefaultRouter()
 router.register(r'posts', PostViewSet, basename='post')
@@ -46,9 +31,8 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('register/', user_views.register, name='register'),
     path('profile/', user_views.profile, name='profile'),
-     path("logout/", user_views.logout_view, name="logout"),
+    path("logout/", user_views.logout_view, name="logout"),
     path('login/', auth_views.LoginView.as_view(template_name='users/login.html'), name='login'),
-    path('logout/', auth_views.LogoutView.as_view(template_name='users/logout.html'), name='logout'),
     path('post/<int:pk>/like/', user_views.LikeView, name='post-like'),
      path('post/<int:pk>/dislike/', user_views.DislikeView, name='post-dislike'),
     path('api/csrf/', csrf_view, name='api-csrf'),

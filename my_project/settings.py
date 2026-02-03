@@ -26,15 +26,17 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY =  os.environ.get('DJANGO_SECRET_KEY')
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get('DJANGO_DEBUG')
+def env_bool(name, default=False):
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "t", "yes", "y", "on"}
 
-# Add to settings.py
-if not DEBUG:
-    DEFAULT_FILE_STORAGE = os.environ.get('default_file_storage')
-    AWS_STORAGE_BUCKET_NAME = os.environ.get('AWS_STORAGE_BUCKET_NAME')
-    # Other AWS settings
+
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY')
+# SECURITY WARNING: don't run with debug turned on in production!
+DEBUG = env_bool('DJANGO_DEBUG', default=False)
+ENVIRONMENT = os.environ.get('ENVIRONMENT', 'development')
 
 
 ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0', 'my-project-latest.onrender.com']
@@ -74,26 +76,29 @@ INSTALLED_APPS = [
 # Channels configuration
 ASGI_APPLICATION = 'my_project.asgi.application'
 
-# Channel layers - using in-memory for development
-# For production, use Redis:
-# CHANNEL_LAYERS = {
-#     'default': {
-#         'BACKEND': 'channels_redis.core.RedisChannelLayer',
-#         'CONFIG': {
-#             'hosts': [('127.0.0.1', 6379)],
-#         },
-#     },
-# }
-CHANNEL_LAYERS = {
-    'default': {
-        'BACKEND': 'channels.layers.InMemoryChannelLayer',
-    },
-}
+# Channel layers - use Redis when available
+REDIS_URL = os.environ.get('REDIS_URL')
+if REDIS_URL:
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels_redis.core.RedisChannelLayer',
+            'CONFIG': {
+                'hosts': [REDIS_URL],
+            },
+        },
+    }
+else:
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels.layers.InMemoryChannelLayer',
+        },
+    }
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'users.middleware.AdminIPAllowlistMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -170,6 +175,21 @@ AWS_S3_VERIFY = True
 
 AWS_S3_CUSTOM_DOMAIN = f'{AWS_STORAGE_BUCKET_NAME}.s3.{AWS_S3_REGION_NAME}.amazonaws.com'
 
+# Payments
+PAYSTACK_VERIFY = env_bool('PAYSTACK_VERIFY', default=not DEBUG)
+PAYSTACK_WEBHOOK_VERIFY = env_bool('PAYSTACK_WEBHOOK_VERIFY', default=not DEBUG)
+
+# Admin allowlist (Tailscale IPs)
+ADMIN_IP_RESTRICT = env_bool('ADMIN_IP_RESTRICT', default=True)
+ADMIN_ALLOWED_IPS = [
+    ip.strip()
+    for ip in os.environ.get(
+        'ADMIN_ALLOWED_IPS',
+        '127.0.0.1,::1,100.90.107.100',
+    ).split(',')
+    if ip.strip()
+]
+
 
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
@@ -220,13 +240,19 @@ if os.environ.get('DJANGO_ENV') != 'production':
 
 STATIC_URL = '/static/'
 STATICFILES_DIRS = [BASE_DIR / 'blog/static']
-MEDIA_URL = os.environ.get("media_url", '/media/')                            
+MEDIA_URL = os.environ.get("MEDIA_URL") or os.environ.get("media_url") or '/media/'
 
  #'/media/' 
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
-STATICFILES_STORAGE = os.environ.get("staticfiles_storage")
-DEFAULT_FILE_STORAGE = os.environ.get("default_file_storage") 
+STATICFILES_STORAGE = os.environ.get(
+    "STATICFILES_STORAGE",
+    "whitenoise.storage.CompressedManifestStaticFilesStorage",
+)
+DEFAULT_FILE_STORAGE = os.environ.get(
+    "DEFAULT_FILE_STORAGE",
+    "django.core.files.storage.FileSystemStorage",
+)
 
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 

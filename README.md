@@ -1,59 +1,43 @@
-# 🌐 Spherespace
+# Spherespace
 
-> **Where People Connect** — A real-time social platform for creators and communities
+Spherespace is a real-time social platform for creators and communities. It combines a React + TypeScript frontend with a Django REST + Channels backend to deliver messaging, creator tools, payments, and community features.
 
-Spherespace combines a blazing-fast React + TypeScript frontend with a robust Django REST + Channels backend to deliver real-time messaging, verified creator badges, payments, gamification, and creator analytics.
-
----
-
-## 🎯 Features Overview
+## Features
 
 | Category | Features |
 |----------|----------|
-| **Social** | User profiles, following, posts, comments, communities |
-| **Real-time Chat** | WebSocket messaging, typing indicators, read receipts, message requests |
-| **Gamification** | 🏆 Achievement badges, 🔥 activity streaks, karma system |
-| **Creators** | Verified badges, analytics dashboard, payment integration |
-| **Live Streaming** | 📹 Real-time broadcasting, chat overlay, floating hearts, host controls |
-| **UI/UX** | Dark/light themes, skeleton loading, micro-interactions, glassmorphism |
+| Social | User profiles, following, posts, comments, communities |
+| Real-time Chat | WebSocket messaging, typing indicators, read receipts, message requests |
+| Gamification | Achievement badges, activity streaks, karma system |
+| Creators | Verified badges, analytics dashboard, payment integration |
+| Live Streaming | Broadcasting, chat overlay, viewer count, host controls |
+| UI/UX | Dark/light themes, skeleton loading, micro-interactions |
 
----
-
-## 📸 Screenshots
+## Screenshots
 
 <div align="center">
 
-### 🏠 Homepage
-*Main feed with posts, trending topics, activity streaks, and community discovery*
-
+### Homepage
 <img src="docs/screenshots/homepage.png" alt="Spherespace Homepage" width="800"/>
 
 ---
 
-### 🌐 Community Page
-*Dedicated community spaces with custom banners, member management, and focused discussions*
-
+### Community Page
 <img src="docs/screenshots/community.png" alt="Community Page" width="800"/>
 
 ---
 
-### 📹 Live Streaming
-*Real-time broadcasting with live chat, viewer count, and host controls*
-
+### Live Streaming
 <img src="docs/screenshots/livestream.png" alt="Live Streaming Page" width="800"/>
 
 ---
 
-### 🔌 API Documentation
-*Interactive Swagger UI for exploring and testing all REST API endpoints*
-
+### API Documentation
 <img src="docs/screenshots/api-docs.png" alt="API Documentation" width="800"/>
 
 </div>
 
----
-
-## 🏗️ Architecture
+## Architecture
 
 ```mermaid
 graph TB
@@ -84,7 +68,7 @@ graph TB
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 my_project/
@@ -112,7 +96,7 @@ my_project/
 
 ---
 
-## 🏆 Achievements System
+## Achievements System
 
 The platform includes a gamification layer with automatic achievement detection:
 
@@ -131,19 +115,19 @@ flowchart LR
     F --> H
     G --> H
     
-    H --> I[Show Celebration 🎉]
+    H --> I[Notify User]
 ```
 
 ### Available Achievements
 
 | Achievement | Trigger | Badge |
 |-------------|---------|-------|
-| First Post | Publish 1 post | 🚀 |
-| Rising Star | Publish 10 posts | ⭐ |
-| Karma King | Reach 100 karma | 👑 |
-| Week Warrior | 7-day activity streak | 🔥 |
-| Community Builder | Join 5 communities | 🏘️ |
-| Social Butterfly | Reach 50 followers | 🦋 |
+| First Post | Publish 1 post | First Post |
+| Rising Star | Publish 10 posts | Rising Star |
+| Karma King | Reach 100 karma | Karma King |
+| Week Warrior | 7-day activity streak | Week Warrior |
+| Community Builder | Join 5 communities | Community Builder |
+| Social Butterfly | Reach 50 followers | Social Butterfly |
 
 ### API Endpoints
 
@@ -161,7 +145,7 @@ GET /api/achievements/
 
 ---
 
-## 💬 Real-time Chat
+## Real-time Chat
 
 ```mermaid
 sequenceDiagram
@@ -179,7 +163,7 @@ sequenceDiagram
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Option 1: Docker (Recommended)
 
@@ -260,7 +244,7 @@ npm run dev
 
 ---
 
-## 📖 API Documentation
+## API Documentation
 
 The Spherespace API includes interactive documentation powered by **OpenAPI/Swagger**.
 
@@ -312,7 +296,7 @@ POST /api/streams/{id}/end_stream/
 DELETE /api/streams/{id}/delete_stream/
 ```
 
-## ⚙️ Environment Variables
+## Environment Variables
 
 Create a `.env` file in the project root:
 
@@ -335,6 +319,12 @@ AWS_STORAGE_BUCKET_NAME=
 # Payments
 PAYSTACK_SECRET_KEY=sk_test_xxx
 PAYSTACK_PUBLIC_KEY=pk_test_xxx
+PAYSTACK_VERIFY=True
+PAYSTACK_WEBHOOK_VERIFY=True
+
+# Admin access
+ADMIN_IP_RESTRICT=True
+ADMIN_ALLOWED_IPS=127.0.0.1,::1,100.90.107.100
 
 # Email
 EMAIL_HOST_USER=your@email.com
@@ -343,7 +333,11 @@ EMAIL_HOST_PASSWORD=app-password
 
 ---
 
-## 📊 Scalability
+## Admin Access Control
+
+Admin access is restricted by an IP allowlist. Update `ADMIN_ALLOWED_IPS` with Tailscale or trusted IPs. You can disable the restriction by setting `ADMIN_IP_RESTRICT=False`.
+
+## Scalability
 
 | Component | Current | At Scale (1M+ users) |
 |-----------|---------|----------------------|
@@ -377,7 +371,7 @@ CHANNEL_LAYERS = {
 
 ---
 
-## 🎨 UI Features
+## UI Features
 
 ### Micro-interactions
 - **Like button**: Heartbeat animation on click
@@ -388,16 +382,18 @@ CHANNEL_LAYERS = {
 Shimmer loading states across all pages for premium feel.
 
 ### Theme Support
-- 🌙 Dark mode
-- ☀️ Light mode
+- Dark mode
+- Light mode
 - System preference detection
 
 ### Live Experience
-- **Glassmorphism**: Premium transparent overlays for stream controls
-- **Custom Modals**: Apple-style confirmation dialogs for critical actions
-- **Interactive**: Real-time hearts and chat overlay
+- Premium transparent overlays for stream controls
+- Confirmation dialogs for critical actions
+- Real-time hearts and chat overlay
 
----
+## License
+
+See [LICENSE](LICENSE).
 
 ## 🛣️ Roadmap
 
