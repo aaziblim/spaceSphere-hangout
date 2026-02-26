@@ -498,5 +498,18 @@ export async function leaveCommunity(slug: string): Promise<{ status: string }> 
   return data
 }
 
+// ============ TRENDING POSTS API ============
+
+export interface TrendingPostsResponse {
+  results: Post[]
+  count: number
+  algorithm: string
+}
+
+export async function fetchTrendingPosts(limit = 5): Promise<TrendingPostsResponse> {
+  const { data } = await api.get<TrendingPostsResponse>('/posts/trending/', { params: { limit } })
+  return data
+}
+
 // Default export for axios instance (for direct API calls)
 export default api

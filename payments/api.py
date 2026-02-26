@@ -15,6 +15,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework import serializers
+from drf_spectacular.utils import extend_schema, inline_serializer, OpenApiResponse
 
 from .models import Payment, Subscription
 from .email_service import send_payment_confirmation_email, send_subscription_cancelled_email
@@ -36,7 +37,7 @@ class SubscriptionSerializer(serializers.ModelSerializer):
             'cancelled_at', 'is_active'
         ]
     
-    def get_tier_display(self, obj):
+    def get_tier_display(self, obj) -> str:
         return {'basic': 'Blue', 'premium': 'Premium', 'organization': 'Organization'}.get(obj.tier, obj.tier)
 
 
@@ -102,6 +103,33 @@ def verify_transaction_with_paystack(reference):
 # API ENDPOINTS
 # =============================================================================
 
+@extend_schema(
+    request=inline_serializer(
+        name='InitializePaymentRequest',
+        fields={
+            'tier': serializers.CharField(),
+            'billing_cycle': serializers.CharField(),
+            'payment_method': serializers.CharField(),
+            'phone_number': serializers.CharField(required=False),
+            'momo_provider': serializers.CharField(required=False),
+        },
+    ),
+    responses=inline_serializer(
+        name='InitializePaymentResponse',
+        fields={
+            'reference': serializers.CharField(),
+            'amount': serializers.IntegerField(),
+            'currency': serializers.CharField(),
+            'email': serializers.EmailField(),
+            'tier': serializers.CharField(),
+            'billing_cycle': serializers.CharField(),
+            'payment_method': serializers.CharField(),
+            'phone_number': serializers.CharField(required=False, allow_null=True),
+            'momo_provider': serializers.CharField(required=False, allow_null=True),
+            'public_key': serializers.CharField(),
+        },
+    )
+)
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def initialize_payment(request):
@@ -171,6 +199,21 @@ def initialize_payment(request):
     })
 
 
+@extend_schema(
+    request=inline_serializer(
+        name='VerifyPaymentRequest',
+        fields={'paystack_reference': serializers.CharField(required=False)},
+    ),
+    responses=inline_serializer(
+        name='VerifyPaymentResponse',
+        fields={
+            'status': serializers.CharField(),
+            'message': serializers.CharField(),
+            'payment': PaymentSerializer(),
+            'subscription': SubscriptionSerializer(),
+        },
+    )
+)
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
 def verify_payment(request, reference):
@@ -229,7 +272,11 @@ def verify_payment(request, reference):
     payment.save(update_fields=['subscription'])
     
     # Send confirmation email
-    send_payment_confirmation_email(user, payment)
+    if getattr(settings, 'CELERY_ENABLED', False):
+        from .tasks import send_payment_confirmation_email_task
+        send_payment_confirmation_email_task.delay(payment.id)
+    else:
+        send_payment_confirmation_email(user, payment)
     
     return Response({
         'status': 'success',
@@ -239,6 +286,15 @@ def verify_payment(request, reference):
     })
 
 
+@extend_schema(
+    responses=inline_serializer(
+        name='GetSubscriptionResponse',
+        fields={
+            'has_subscription': serializers.BooleanField(),
+            'subscription': SubscriptionSerializer(),
+        },
+    )
+)
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_subscription(request):
@@ -258,6 +314,17 @@ def get_subscription(request):
         })
 
 
+@extend_schema(
+    methods=['POST'],
+    responses=inline_serializer(
+        name='CancelSubscriptionResponse',
+        fields={
+            'status': serializers.CharField(),
+            'message': serializers.CharField(),
+            'subscription': SubscriptionSerializer(),
+        },
+    )
+)
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def cancel_subscription(request):
@@ -279,7 +346,11 @@ def cancel_subscription(request):
     subscription.cancel()
     
     # Send cancellation email
-    send_subscription_cancelled_email(user, subscription)
+    if getattr(settings, 'CELERY_ENABLED', False):
+        from .tasks import send_subscription_cancelled_email_task
+        send_subscription_cancelled_email_task.delay(subscription.id)
+    else:
+        send_subscription_cancelled_email(user, subscription)
     
     return Response({
         'status': 'success',
@@ -288,6 +359,12 @@ def cancel_subscription(request):
     })
 
 
+@extend_schema(
+    responses=inline_serializer(
+        name='PaymentHistoryResponse',
+        fields={'payments': PaymentSerializer(many=True)},
+    )
+)
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def payment_history(request):
@@ -304,6 +381,10 @@ def payment_history(request):
 # =============================================================================
 
 @csrf_exempt
+@extend_schema(
+    methods=['POST'],
+    responses={200: OpenApiResponse(description='OK')}
+)
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def paystack_webhook(request):
@@ -353,7 +434,11 @@ def paystack_webhook(request):
                         payment.save(update_fields=['subscription'])
                         
                         # Send email
-                        send_payment_confirmation_email(payment.user, payment)
+                        if getattr(settings, 'CELERY_ENABLED', False):
+                            from .tasks import send_payment_confirmation_email_task
+                            send_payment_confirmation_email_task.delay(payment.id)
+                        else:
+                            send_payment_confirmation_email(payment.user, payment)
                         
                 except Payment.DoesNotExist:
                     pass

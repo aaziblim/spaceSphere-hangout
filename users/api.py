@@ -6,6 +6,13 @@ from rest_framework.response import Response
 from rest_framework import serializers
 from users.models import Profile, Follow, UserPublicKey
 from django.db.models import Count, Q
+from drf_spectacular.utils import (
+    extend_schema,
+    inline_serializer,
+    OpenApiParameter,
+    OpenApiResponse,
+)
+from typing import Optional, List
 
 
 class ProfileSerializer(serializers.ModelSerializer):
@@ -15,7 +22,7 @@ class ProfileSerializer(serializers.ModelSerializer):
         model = Profile
         fields = ['image', 'bio']
 
-    def get_image(self, obj):
+    def get_image(self, obj) -> Optional[str]:
         if not obj.image:
             return None
         request = self.context.get("request")
@@ -55,6 +62,24 @@ class RegisterSerializer(serializers.ModelSerializer):
         return user
 
 
+@extend_schema(
+    methods=['GET'],
+    responses=UserSerializer,
+)
+@extend_schema(
+    methods=['PATCH'],
+    request=inline_serializer(
+        name='UserUpdateRequest',
+        fields={
+            'first_name': serializers.CharField(required=False),
+            'last_name': serializers.CharField(required=False),
+            'email': serializers.EmailField(required=False),
+            'bio': serializers.CharField(required=False),
+            'image': serializers.ImageField(required=False),
+        },
+    ),
+    responses=UserSerializer,
+)
 @api_view(['GET', 'PATCH'])
 @permission_classes([permissions.IsAuthenticated])
 def user_view(request):
@@ -86,6 +111,20 @@ def user_view(request):
         return Response(serializer.data)
 
 
+@extend_schema(
+    request=inline_serializer(
+        name='LoginRequest',
+        fields={
+            'username': serializers.CharField(),
+            'password': serializers.CharField(),
+        },
+    ),
+    responses={
+        200: UserSerializer,
+        400: OpenApiResponse(description='Username and password are required.'),
+        401: OpenApiResponse(description='Invalid credentials.'),
+    },
+)
 @api_view(['POST'])
 @permission_classes([permissions.AllowAny])
 def login_view(request):
@@ -111,6 +150,13 @@ def login_view(request):
     return Response(serializer.data)
 
 
+@extend_schema(
+    methods=['POST'],
+    responses=inline_serializer(
+        name='LogoutResponse',
+        fields={'detail': serializers.CharField()},
+    )
+)
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def logout_view(request):
@@ -119,6 +165,10 @@ def logout_view(request):
     return Response({'detail': 'Logged out.'})
 
 
+@extend_schema(
+    request=RegisterSerializer,
+    responses={201: UserSerializer, 400: OpenApiResponse(description='Validation error')},
+)
 @api_view(['POST'])
 @permission_classes([permissions.AllowAny])
 def register_view(request):
@@ -143,7 +193,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
         model = User
         fields = ['id', 'username', 'first_name', 'last_name', 'profile_image', 'bio', 'posts_count', 'followers_count', 'following_count', 'posts']
 
-    def get_profile_image(self, obj):
+    def get_profile_image(self, obj) -> Optional[str]:
         profile = getattr(obj, 'profile', None)
         image = getattr(profile, 'image', None)
         if not image:
@@ -153,25 +203,36 @@ class UserProfileSerializer(serializers.ModelSerializer):
             return request.build_absolute_uri(image.url)
         return image.url
 
-    def get_bio(self, obj):
+    def get_bio(self, obj) -> str:
         profile = getattr(obj, 'profile', None)
         return getattr(profile, 'bio', '') or ''
 
-    def get_posts_count(self, obj):
+    def get_posts_count(self, obj) -> int:
         return obj.post_set.count()
 
-    def get_followers_count(self, obj):
+    def get_followers_count(self, obj) -> int:
         return obj.followers.count()
 
-    def get_following_count(self, obj):
+    def get_following_count(self, obj) -> int:
         return obj.following.count()
 
-    def get_posts(self, obj):
+    def get_posts(self, obj) -> List[dict]:
         from blog.api import PostSerializer
         posts = obj.post_set.order_by('-date_posted')[:12]
         return PostSerializer(posts, many=True, context=self.context).data
 
 
+class UserProfileResponseSerializer(UserProfileSerializer):
+    is_following = serializers.BooleanField()
+
+    class Meta(UserProfileSerializer.Meta):
+        fields = UserProfileSerializer.Meta.fields + ['is_following']
+
+
+@extend_schema(
+    parameters=[OpenApiParameter(name='username', type=str, location=OpenApiParameter.PATH)],
+    responses=UserProfileResponseSerializer,
+)
 @api_view(['GET'])
 @permission_classes([permissions.AllowAny])
 def user_profile_view(request, username):
@@ -196,6 +257,17 @@ def user_profile_view(request, username):
     return Response(data)
 
 
+@extend_schema(
+    parameters=[OpenApiParameter(name='username', type=str, location=OpenApiParameter.PATH)],
+    responses=inline_serializer(
+        name='FollowResponse',
+        fields={
+            'detail': serializers.CharField(),
+            'is_following': serializers.BooleanField(),
+            'followers_count': serializers.IntegerField(),
+        },
+    ),
+)
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def follow_user_view(request, username):
@@ -227,6 +299,17 @@ def follow_user_view(request, username):
         })
 
 
+@extend_schema(
+    parameters=[OpenApiParameter(name='username', type=str, location=OpenApiParameter.PATH)],
+    responses=inline_serializer(
+        name='UnfollowResponse',
+        fields={
+            'detail': serializers.CharField(),
+            'is_following': serializers.BooleanField(),
+            'followers_count': serializers.IntegerField(),
+        },
+    ),
+)
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def unfollow_user_view(request, username):
@@ -257,7 +340,7 @@ class SuggestionUserSerializer(serializers.ModelSerializer):
         model = User
         fields = ['id', 'username', 'first_name', 'last_name', 'profile_image', 'followers_count', 'bio']
 
-    def get_profile_image(self, obj):
+    def get_profile_image(self, obj) -> Optional[str]:
         profile = getattr(obj, 'profile', None)
         image = getattr(profile, 'image', None)
         if not image:
@@ -267,14 +350,15 @@ class SuggestionUserSerializer(serializers.ModelSerializer):
             return request.build_absolute_uri(image.url)
         return image.url
 
-    def get_followers_count(self, obj):
+    def get_followers_count(self, obj) -> int:
         return obj.followers.count()
     
-    def get_bio(self, obj):
+    def get_bio(self, obj) -> str:
         profile = getattr(obj, 'profile', None)
         return getattr(profile, 'bio', '') or ''
 
 
+@extend_schema(responses=SuggestionUserSerializer(many=True))
 @api_view(['GET'])
 @permission_classes([permissions.AllowAny])
 def suggested_users_view(request):
@@ -295,6 +379,19 @@ def suggested_users_view(request):
     return Response(serializer.data)
 
 
+@extend_schema(
+    responses=inline_serializer(
+        name='UserStatsResponse',
+        fields={
+            'username': serializers.CharField(),
+            'profile_image': serializers.CharField(allow_null=True),
+            'posts_count': serializers.IntegerField(),
+            'karma': serializers.IntegerField(),
+            'followers_count': serializers.IntegerField(),
+            'following_count': serializers.IntegerField(),
+        },
+    )
+)
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def user_stats_view(request):
@@ -323,6 +420,7 @@ def user_stats_view(request):
     })
 
 
+@extend_schema(responses=SuggestionUserSerializer(many=True))
 @api_view(['GET'])
 @permission_classes([permissions.AllowAny])
 def explore_users_view(request):
@@ -356,7 +454,7 @@ class SearchPostSerializer(serializers.ModelSerializer):
         model = Post
         fields = ['id', 'public_id', 'slug', 'title', 'content', 'post_image_url', 'date_posted', 'author', 'likes_count', 'comments_count']
 
-    def get_post_image_url(self, obj):
+    def get_post_image_url(self, obj) -> Optional[str]:
         if not obj.post_image:
             return None
         request = self.context.get('request')
@@ -364,13 +462,23 @@ class SearchPostSerializer(serializers.ModelSerializer):
             return request.build_absolute_uri(obj.post_image.url)
         return obj.post_image.url
 
-    def get_likes_count(self, obj):
+    def get_likes_count(self, obj) -> int:
         return obj.likes.count()
 
-    def get_comments_count(self, obj):
+    def get_comments_count(self, obj) -> int:
         return obj.comments.count()
 
 
+@extend_schema(
+    parameters=[OpenApiParameter(name='q', type=str, location=OpenApiParameter.QUERY)],
+    responses=inline_serializer(
+        name='SearchResponse',
+        fields={
+            'users': SuggestionUserSerializer(many=True),
+            'posts': SearchPostSerializer(many=True),
+        },
+    )
+)
 @api_view(['GET'])
 @permission_classes([permissions.AllowAny])
 def search_view(request):
@@ -409,6 +517,7 @@ def search_view(request):
     })
 
 
+@extend_schema(responses=SuggestionUserSerializer(many=True))
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def following_list_view(request):
@@ -435,7 +544,7 @@ class ChatParticipantSerializer(serializers.ModelSerializer):
         model = User
         fields = ['id', 'username', 'first_name', 'last_name', 'profile_image', 'is_online', 'last_seen']
     
-    def get_profile_image(self, obj):
+    def get_profile_image(self, obj) -> Optional[str]:
         profile = getattr(obj, 'profile', None)
         image = getattr(profile, 'image', None)
         if not image:
@@ -445,13 +554,13 @@ class ChatParticipantSerializer(serializers.ModelSerializer):
             return request.build_absolute_uri(image.url)
         return image.url
     
-    def get_is_online(self, obj):
+    def get_is_online(self, obj) -> bool:
         profile = getattr(obj, 'profile', None)
         if profile:
             return profile.is_online
         return False
     
-    def get_last_seen(self, obj):
+    def get_last_seen(self, obj) -> Optional[str]:
         profile = getattr(obj, 'profile', None)
         if profile and profile.last_seen:
             return profile.last_seen.isoformat()
@@ -485,19 +594,31 @@ class ConversationSerializer(serializers.ModelSerializer):
             'updated_at', 'is_request', 'request_status'
         ]
     
-    def get_last_message(self, obj):
+    def get_last_message(self, obj) -> Optional[dict]:
         last_msg = obj.get_last_message()
         if last_msg:
             return DirectMessageSerializer(last_msg, context=self.context).data
         return None
     
-    def get_unread_count(self, obj):
+    def get_unread_count(self, obj) -> int:
         request = self.context.get('request')
         if request and request.user.is_authenticated:
             return obj.get_unread_count(request.user)
         return 0
 
 
+@extend_schema(
+    methods=['GET'],
+    responses=ConversationSerializer(many=True),
+)
+@extend_schema(
+    methods=['POST'],
+    request=inline_serializer(
+        name='ConversationCreateRequest',
+        fields={'username': serializers.CharField()},
+    ),
+    responses={201: ConversationSerializer, 400: OpenApiResponse(description='Validation error')},
+)
 @api_view(['GET', 'POST'])
 @permission_classes([permissions.IsAuthenticated])
 def conversations_view(request):
@@ -548,6 +669,24 @@ def conversations_view(request):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
+@extend_schema(
+    methods=['GET'],
+    responses=DirectMessageSerializer(many=True),
+)
+@extend_schema(
+    methods=['POST'],
+    request=inline_serializer(
+        name='ConversationMessageCreateRequest',
+        fields={
+            'content': serializers.CharField(required=False),
+            'message_type': serializers.CharField(required=False),
+            'attachment_url': serializers.CharField(required=False, allow_null=True),
+            'shared_post_id': serializers.IntegerField(required=False, allow_null=True),
+            'is_encrypted': serializers.BooleanField(required=False),
+        },
+    ),
+    responses={201: DirectMessageSerializer, 400: OpenApiResponse(description='Validation error')},
+)
 @api_view(['GET', 'POST'])
 @permission_classes([permissions.IsAuthenticated])
 def conversation_messages_view(request, conversation_id):
@@ -612,6 +751,16 @@ def conversation_messages_view(request, conversation_id):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
+@extend_schema(
+    request=inline_serializer(
+        name='MessageActionRequest',
+        fields={'action': serializers.CharField()},
+    ),
+    responses=inline_serializer(
+        name='MessageActionResponse',
+        fields={'detail': serializers.CharField(required=False), 'error': serializers.CharField(required=False)},
+    )
+)
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def message_action_view(request, message_id):
@@ -632,6 +781,16 @@ def message_action_view(request, message_id):
     return Response({'error': 'Invalid action'}, status=status.HTTP_400_BAD_REQUEST)
 
 
+@extend_schema(
+    request=inline_serializer(
+        name='ConversationActionRequest',
+        fields={'action': serializers.CharField()},
+    ),
+    responses=inline_serializer(
+        name='ConversationActionResponse',
+        fields={'detail': serializers.CharField(required=False), 'error': serializers.CharField(required=False)},
+    )
+)
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def conversation_action_view(request, conversation_id):
@@ -660,6 +819,7 @@ def conversation_action_view(request, conversation_id):
     return Response({'error': 'Invalid action'}, status=status.HTTP_400_BAD_REQUEST)
 
 
+@extend_schema(responses=ConversationSerializer(many=True))
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def message_requests_view(request):
@@ -682,6 +842,12 @@ def message_requests_view(request):
     return Response(serializer.data)
 
 
+@extend_schema(
+    responses=inline_serializer(
+        name='UnreadCountResponse',
+        fields={'unread_count': serializers.IntegerField()},
+    )
+)
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def unread_count_view(request):
@@ -700,6 +866,16 @@ from users.models import UserActivity
 from datetime import timedelta
 
 
+@extend_schema(
+    responses=inline_serializer(
+        name='UserStreakResponse',
+        fields={
+            'days': serializers.ListField(child=serializers.BooleanField()),
+            'current_streak': serializers.IntegerField(),
+            'week_start': serializers.CharField(),
+        },
+    )
+)
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def user_streak_view(request):
@@ -754,6 +930,17 @@ def user_streak_view(request):
     })
 
 
+@extend_schema(
+    responses=inline_serializer(
+        name='CommunityPulseResponse',
+        fields={
+            'pulse': serializers.IntegerField(),
+            'posts_count': serializers.IntegerField(),
+            'comments_count': serializers.IntegerField(),
+            'active_users': serializers.IntegerField(),
+        },
+    )
+)
 @api_view(['GET'])
 @permission_classes([permissions.AllowAny])
 def community_pulse_view(request):
@@ -795,6 +982,17 @@ def community_pulse_view(request):
 
 # ============ E2EE PUBLIC KEY API ============
 
+@extend_schema(
+    parameters=[OpenApiParameter(name='username', type=str, location=OpenApiParameter.PATH)],
+    responses=inline_serializer(
+        name='PublicKeyResponse',
+        fields={
+            'username': serializers.CharField(),
+            'public_key': serializers.CharField(),
+            'updated_at': serializers.CharField(),
+        },
+    )
+)
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def get_public_key(request, username):
@@ -820,6 +1018,16 @@ def get_public_key(request, username):
         return Response({'error': 'Public key not found'}, status=status.HTTP_404_NOT_FOUND)
 
 
+@extend_schema(
+    request=inline_serializer(
+        name='SetPublicKeyRequest',
+        fields={'public_key': serializers.CharField()},
+    ),
+    responses=inline_serializer(
+        name='SetPublicKeyResponse',
+        fields={'status': serializers.CharField(), 'username': serializers.CharField()},
+    ),
+)
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def set_public_key(request):
@@ -848,6 +1056,16 @@ def set_public_key(request):
     return Response({'status': 'ok', 'username': request.user.username})
 
 
+@extend_schema(
+    responses=inline_serializer(
+        name='MyPublicKeyResponse',
+        fields={
+            'username': serializers.CharField(),
+            'public_key': serializers.CharField(),
+            'updated_at': serializers.CharField(),
+        },
+    )
+)
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def get_my_public_key(request):
@@ -933,6 +1151,22 @@ def check_and_award_achievements(user):
     return new_achievements
 
 
+@extend_schema(
+    responses=inline_serializer(
+        name='PendingAchievementsResponse',
+        fields={
+            'pending': serializers.ListField(
+                child=inline_serializer(
+                    name='PendingAchievement',
+                    fields={
+                        'id': serializers.CharField(),
+                        'earned_at': serializers.CharField(),
+                    },
+                )
+            )
+        },
+    )
+)
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def pending_achievements_view(request):
@@ -958,6 +1192,16 @@ def pending_achievements_view(request):
     return Response({'pending': achievements})
 
 
+@extend_schema(
+    request=inline_serializer(
+        name='MarkAchievementShownRequest',
+        fields={'achievement_id': serializers.CharField()},
+    ),
+    responses=inline_serializer(
+        name='MarkAchievementShownResponse',
+        fields={'detail': serializers.CharField()},
+    )
+)
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def mark_achievement_shown_view(request):
@@ -977,6 +1221,22 @@ def mark_achievement_shown_view(request):
         return Response({'error': 'Achievement not found'}, status=status.HTTP_404_NOT_FOUND)
 
 
+@extend_schema(
+    responses=inline_serializer(
+        name='AllAchievementsResponse',
+        fields={
+            'achievements': serializers.ListField(
+                child=inline_serializer(
+                    name='Achievement',
+                    fields={
+                        'id': serializers.CharField(),
+                        'earned_at': serializers.CharField(),
+                    },
+                )
+            )
+        },
+    )
+)
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def all_achievements_view(request):

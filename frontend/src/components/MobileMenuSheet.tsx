@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../AuthContext'
 import { useQuery } from '@tanstack/react-query'
-import { fetchLivestreams, fetchMyCommunities } from '../api'
+import { fetchLivestreams, fetchMyCommunities, fetchTrendingPosts } from '../api'
 import { useFollow } from '../hooks/useFollow'
 import type { Community } from '../types'
 
@@ -507,20 +507,23 @@ function QuickAccessContent({ onClose }: { onClose: () => void }) {
 function TrendingContent({ onClose }: { onClose: () => void }) {
   const navigate = useNavigate()
 
-  const topics = [
-    { tag: 'react', posts: 234, hot: true },
-    { tag: 'typescript', posts: 189, hot: true },
-    { tag: 'webdev', posts: 156, hot: false },
-    { tag: 'design', posts: 98, hot: false },
-    { tag: 'ai', posts: 87, hot: true },
-    { tag: 'mobile', posts: 76, hot: false },
-    { tag: 'python', posts: 65, hot: false },
-    { tag: 'javascript', posts: 54, hot: true },
-  ]
+  const { data: trending, isLoading } = useQuery({
+    queryKey: ['trending-posts'],
+    queryFn: () => fetchTrendingPosts(8),
+    staleTime: 60000,
+  })
 
-  const handleClick = (tag: string) => {
-    navigate(`/?search=${tag}`)
+  const handleClick = (slug: string, publicId: string) => {
+    navigate(`/post/${slug || publicId}`)
     onClose()
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }} />
+      </div>
+    )
   }
 
   return (
@@ -528,27 +531,35 @@ function TrendingContent({ onClose }: { onClose: () => void }) {
       <p className="text-sm px-1 mb-3" style={{ color: 'var(--text-tertiary)' }}>
         See what's trending right now
       </p>
-      {topics.map((topic) => (
-        <button
-          key={topic.tag}
-          onClick={() => handleClick(topic.tag)}
-          className="w-full flex items-center justify-between p-4 rounded-xl transition-all active:scale-[0.98]"
-          style={{ backgroundColor: 'var(--bg-tertiary)' }}
-        >
-          <div className="flex items-center gap-3">
-            <span className="text-2xl font-bold" style={{ color: 'var(--accent)' }}>#</span>
-            <div className="text-left">
-              <p className="font-semibold" style={{ color: 'var(--text-primary)' }}>{topic.tag}</p>
-              <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>{topic.posts} posts</p>
+      {trending && trending.results.length > 0 ? (
+        trending.results.map((post) => (
+          <button
+            key={post.public_id}
+            onClick={() => handleClick(post.slug, post.public_id)}
+            className="w-full flex items-center justify-between p-4 rounded-xl transition-all active:scale-[0.98]"
+            style={{ backgroundColor: 'var(--bg-tertiary)' }}
+          >
+            <div className="flex items-center gap-3">
+              <span className="text-2xl font-bold" style={{ color: 'var(--accent)' }}>📈</span>
+              <div className="text-left">
+                <p className="font-semibold truncate max-w-[200px]" style={{ color: 'var(--text-primary)' }}>{post.title}</p>
+                <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>
+                  {post.author.username} · {post.likes_count} ❤️ · {post.comments_count} 💬
+                </p>
+              </div>
             </div>
-          </div>
-          {topic.hot && (
-            <span className="px-2 py-1 rounded-full text-xs font-medium" style={{ backgroundColor: '#FF6B3520', color: '#FF6B35' }}>
-              🔥 Hot
-            </span>
-          )}
-        </button>
-      ))}
+            {(post.likes_count + post.comments_count) > 10 && (
+              <span className="px-2 py-1 rounded-full text-xs font-medium" style={{ backgroundColor: '#FF6B3520', color: '#FF6B35' }}>
+                🔥 Hot
+              </span>
+            )}
+          </button>
+        ))
+      ) : (
+        <p className="text-sm text-center py-8" style={{ color: 'var(--text-tertiary)' }}>
+          No trending posts yet
+        </p>
+      )}
     </div>
   )
 }

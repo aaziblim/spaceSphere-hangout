@@ -1,5 +1,6 @@
 from django.db import models
-from django.db.models import Count, F
+from django.db.models import Count, F, Value, FloatField, ExpressionWrapper
+from django.db.models.functions import Now, Extract, Log, Coalesce
 from rest_framework import viewsets, permissions, decorators, status
 from rest_framework.response import Response
 from rest_framework import serializers
@@ -8,8 +9,11 @@ from rest_framework.decorators import api_view, permission_classes
 from .models import Post, Comment, Livestream, LivestreamMessage, LivestreamSignal, Community, CommunityMembership
 from django.contrib.auth.models import User
 from django.utils import timezone
+from django.core.cache import cache
 from django.utils.text import slugify
 import math
+from drf_spectacular.utils import extend_schema, inline_serializer, OpenApiParameter
+from typing import Optional, List
 
 
 class AuthorSerializer(serializers.ModelSerializer):
@@ -19,7 +23,7 @@ class AuthorSerializer(serializers.ModelSerializer):
         model = User
         fields = ["id", "username", "first_name", "last_name", "profile_image"]
 
-    def get_profile_image(self, obj):
+    def get_profile_image(self, obj) -> Optional[str]:
         profile = getattr(obj, "profile", None)
         image = getattr(profile, "image", None)
         if not image:
@@ -47,18 +51,18 @@ class CommunitySerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'slug', 'creator', 'posts_count', 'members_count', 'created_at']
 
-    def get_is_member(self, obj):
+    def get_is_member(self, obj) -> bool:
         request = self.context.get('request')
         if not request or not request.user.is_authenticated:
             return False
         return obj.members.filter(pk=request.user.pk).exists()
 
-    def get_icon_url(self, obj):
+    def get_icon_url(self, obj) -> Optional[str]:
         if not obj.icon: return None
         request = self.context.get('request')
         return request.build_absolute_uri(obj.icon.url) if request else obj.icon.url
 
-    def get_cover_image_url(self, obj):
+    def get_cover_image_url(self, obj) -> Optional[str]:
         if not obj.cover_image: return None
         request = self.context.get('request')
         return request.build_absolute_uri(obj.cover_image.url) if request else obj.cover_image.url
@@ -129,7 +133,7 @@ class PostSerializer(serializers.ModelSerializer):
             "community",
         ]
 
-    def get_post_image_url(self, obj):
+    def get_post_image_url(self, obj) -> Optional[str]:
         if not obj.post_image:
             return None
         request = self.context.get("request")
@@ -137,7 +141,7 @@ class PostSerializer(serializers.ModelSerializer):
             return request.build_absolute_uri(obj.post_image.url)
         return obj.post_image.url
 
-    def get_post_video_url(self, obj):
+    def get_post_video_url(self, obj) -> Optional[str]:
         if not obj.post_video:
             return None
         request = self.context.get("request")
@@ -145,14 +149,14 @@ class PostSerializer(serializers.ModelSerializer):
             return request.build_absolute_uri(obj.post_video.url)
         return obj.post_video.url
 
-    def get_user_has_liked(self, obj):
+    def get_user_has_liked(self, obj) -> bool:
         request = self.context.get("request")
         user = getattr(request, "user", None)
         if not user or not user.is_authenticated:
             return False
         return obj.likes.filter(pk=user.pk).exists()
 
-    def get_user_has_disliked(self, obj):
+    def get_user_has_disliked(self, obj) -> bool:
         request = self.context.get("request")
         user = getattr(request, "user", None)
         if not user or not user.is_authenticated:
@@ -186,7 +190,11 @@ class PostViewSet(viewsets.ModelViewSet):
         return queryset
 
     def perform_create(self, serializer):
-        serializer.save(author=self.request.user)
+        post = serializer.save(author=self.request.user)
+        if getattr(settings, 'CELERY_ENABLED', False):
+            if post.post_image or post.post_video:
+                from .tasks import process_post_media_task
+                process_post_media_task.delay(post.id)
 
     def get_object(self):
         lookup_value = self.kwargs.get(self.lookup_field)
@@ -343,6 +351,20 @@ def calculate_trending_score(post, now) -> float:
     return (wilson * 40) + (time_factor * 30) + (velocity * 20) + (views_boost * 10)
 
 
+@extend_schema(
+    parameters=[
+        OpenApiParameter(name='limit', type=int, location=OpenApiParameter.QUERY),
+        OpenApiParameter(name='window_days', type=int, location=OpenApiParameter.QUERY),
+    ],
+    responses=inline_serializer(
+        name='TrendingPostsResponse',
+        fields={
+            'results': PostSerializer(many=True),
+            'count': serializers.IntegerField(),
+            'algorithm': serializers.CharField(),
+        },
+    )
+)
 @api_view(['GET'])
 @permission_classes([permissions.AllowAny])
 def trending_posts_view(request):
@@ -354,11 +376,31 @@ def trending_posts_view(request):
     - limit: max posts to return (default 20, max 50)
     """
     limit = min(int(request.query_params.get('limit', 20)), 50)
-    now = timezone.now()
-    
-    # Limit candidates for scalability (recent and engaged posts)
     recent_window_days = int(request.query_params.get('window_days', 7))
-    cutoff = now - timezone.timedelta(days=recent_window_days)
+
+    cache_key = f"trending:{limit}:{recent_window_days}"
+    if not request.user.is_authenticated:
+        cached = cache.get(cache_key)
+        if cached:
+            return Response(cached)
+
+    cutoff = timezone.now() - timezone.timedelta(days=recent_window_days)
+
+    age_seconds = ExpressionWrapper(
+        Extract(Now() - F('date_posted'), 'epoch'),
+        output_field=FloatField(),
+    )
+    age_hours = ExpressionWrapper(age_seconds / Value(3600.0), output_field=FloatField())
+    views = Coalesce(F('views_count'), Value(0))
+    views_boost = Log(views + Value(1.0), Value(10.0))
+
+    score = ExpressionWrapper(
+        (F('likes_count') - F('dislikes_count'))
+        + (F('comments_count') * Value(2.0))
+        + (views_boost * Value(0.5))
+        - (age_hours * Value(0.5)),
+        output_field=FloatField(),
+    )
 
     posts = (
         Post.objects.filter(date_posted__gte=cutoff)
@@ -368,25 +410,29 @@ def trending_posts_view(request):
             likes_count=Count('likes', distinct=True),
             dislikes_count=Count('dislikes', distinct=True),
             comments_count=Count('comments', distinct=True),
+            trending_score=score,
         )
-        .order_by('-date_posted')
+        .order_by('-trending_score', '-date_posted')[:limit]
     )
-    
-    # Calculate trending scores and sort
-    scored = [(p, calculate_trending_score(p, now)) for p in posts[:500]]
-    scored.sort(key=lambda x: x[1], reverse=True)
-    
-    # Get top trending
-    trending = [p for p, _ in scored[:limit]]
-    
-    serializer = PostSerializer(trending, many=True, context={'request': request})
-    return Response({
+
+    serializer = PostSerializer(posts, many=True, context={'request': request})
+    payload = {
         'results': serializer.data,
-        'count': len(trending),
-        'algorithm': 'wilson_hn_velocity'
-    })
+        'count': len(serializer.data),
+        'algorithm': 'db_score_v1'
+    }
+    if not request.user.is_authenticated:
+        cache.set(cache_key, payload, timeout=60)
+    return Response(payload)
 
 
+@extend_schema(
+    methods=['POST'],
+    responses=inline_serializer(
+        name='IncrementPostViewsResponse',
+        fields={'status': serializers.CharField(required=False), 'error': serializers.CharField(required=False)},
+    )
+)
 @api_view(['POST'])
 @permission_classes([permissions.AllowAny])
 def increment_post_views(request, slug):
@@ -396,6 +442,12 @@ def increment_post_views(request, slug):
     """
     updated = Post.objects.filter(slug=slug).update(views_count=F('views_count') + 1)
     if updated:
+        if getattr(settings, 'CELERY_ENABLED', False):
+            from .models import Post as PostModel
+            post_id = PostModel.objects.filter(slug=slug).values_list('id', flat=True).first()
+            if post_id:
+                from .tasks import track_post_view_task
+                track_post_view_task.delay(post_id)
         return Response({'status': 'ok'})
     return Response({'error': 'Post not found'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -427,21 +479,21 @@ class CommentSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["author", "likes_count", "dislikes_count", "replies_count", "user_has_liked", "user_has_disliked"]
 
-    def get_user_has_liked(self, obj):
+    def get_user_has_liked(self, obj) -> bool:
         request = self.context.get("request")
         user = getattr(request, "user", None)
         if not user or not user.is_authenticated:
             return False
         return obj.likes.filter(pk=user.pk).exists()
 
-    def get_user_has_disliked(self, obj):
+    def get_user_has_disliked(self, obj) -> bool:
         request = self.context.get("request")
         user = getattr(request, "user", None)
         if not user or not user.is_authenticated:
             return False
         return obj.dislikes.filter(pk=user.pk).exists()
 
-    def get_replies(self, obj):
+    def get_replies(self, obj) -> List[dict]:
         # Only include replies for top-level comments (no parent)
         if obj.parent is not None:
             return []
@@ -533,7 +585,7 @@ class LivestreamHostSerializer(serializers.ModelSerializer):
         model = User
         fields = ['id', 'username', 'first_name', 'last_name', 'profile_image', 'followers_count']
     
-    def get_profile_image(self, obj):
+    def get_profile_image(self, obj) -> Optional[str]:
         profile = getattr(obj, 'profile', None)
         image = getattr(profile, 'image', None)
         if not image:
@@ -543,7 +595,7 @@ class LivestreamHostSerializer(serializers.ModelSerializer):
             return request.build_absolute_uri(image.url)
         return image.url
     
-    def get_followers_count(self, obj):
+    def get_followers_count(self, obj) -> int:
         from users.models import Follow
         return Follow.objects.filter(following=obj).count()
 
@@ -581,7 +633,7 @@ class LivestreamSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'host', 'viewer_count', 'peak_viewers', 'total_likes', 'started_at', 'ended_at']
     
-    def get_thumbnail_url(self, obj):
+    def get_thumbnail_url(self, obj) -> Optional[str]:
         if not obj.thumbnail:
             return None
         request = self.context.get('request')
@@ -589,7 +641,7 @@ class LivestreamSerializer(serializers.ModelSerializer):
             return request.build_absolute_uri(obj.thumbnail.url)
         return obj.thumbnail.url
     
-    def get_is_owner(self, obj):
+    def get_is_owner(self, obj) -> bool:
         request = self.context.get('request')
         if request and request.user.is_authenticated:
             return obj.host_id == request.user.id

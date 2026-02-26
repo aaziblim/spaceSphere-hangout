@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link, useSearchParams, useLocation } from 'react-router-dom'
 import { useAuth } from '../AuthContext'
 import { useQuery } from '@tanstack/react-query'
-import { fetchLivestreams, fetchUserStreak, fetchCommunityPulse, fetchMyCommunities } from '../api'
+import { fetchLivestreams, fetchUserStreak, fetchCommunityPulse, fetchMyCommunities, fetchTrendingPosts } from '../api'
 import type { Community } from '../types'
 import { useFollow } from '../hooks/useFollow'
 import MilestoneToast, { MILESTONES, shouldShowMilestone, type Milestone } from './MilestoneToast'
@@ -336,13 +336,11 @@ export function RightSidebar() {
 }
 
 function TrendingTopics() {
-  const topics = [
-    { tag: 'react', posts: 234, hot: true },
-    { tag: 'typescript', posts: 189, hot: true },
-    { tag: 'webdev', posts: 156, hot: false },
-    { tag: 'design', posts: 98, hot: false },
-    { tag: 'ai', posts: 87, hot: true },
-  ]
+  const { data: trending, isLoading } = useQuery({
+    queryKey: ['trending-posts'],
+    queryFn: () => fetchTrendingPosts(5),
+    staleTime: 60000,
+  })
 
   return (
     <div
@@ -359,24 +357,47 @@ function TrendingTopics() {
         </span>
       </div>
       <div className="space-y-2">
-        {topics.map((topic) => (
-          <Link
-            key={topic.tag}
-            to={`/?search=${topic.tag}`}
-            className="flex items-center justify-between p-2 rounded-xl transition-all hover:translate-x-1"
-            style={{ backgroundColor: 'var(--bg-tertiary)' }}
-          >
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
-                #{topic.tag}
-              </span>
-              {topic.hot && <span className="text-xs">🔥</span>}
+        {isLoading ? (
+          Array(3).fill(0).map((_, i) => (
+            <div key={i} className="flex items-center gap-2 p-2 rounded-xl animate-pulse" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
+              <div className="w-full space-y-1">
+                <div className="h-3 w-3/4 rounded" style={{ backgroundColor: 'var(--bg-secondary)' }} />
+                <div className="h-2 w-1/2 rounded" style={{ backgroundColor: 'var(--bg-secondary)' }} />
+              </div>
             </div>
-            <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-              {topic.posts} posts
-            </span>
-          </Link>
-        ))}
+          ))
+        ) : trending && trending.results.length > 0 ? (
+          trending.results.map((post) => (
+            <Link
+              key={post.public_id}
+              to={`/post/${post.slug || post.public_id}`}
+              className="flex items-center gap-2 p-2 rounded-xl transition-all hover:translate-x-1"
+              style={{ backgroundColor: 'var(--bg-tertiary)' }}
+            >
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold truncate" style={{ color: 'var(--text-primary)' }}>
+                  {post.title}
+                </p>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                    {post.author.username}
+                  </span>
+                  <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                    ·
+                  </span>
+                  <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                    {post.likes_count} ❤️ · {post.comments_count} 💬
+                  </span>
+                </div>
+              </div>
+              {(post.likes_count + post.comments_count) > 10 && <span className="text-xs">🔥</span>}
+            </Link>
+          ))
+        ) : (
+          <p className="text-xs text-center py-2" style={{ color: 'var(--text-tertiary)' }}>
+            No trending posts yet
+          </p>
+        )}
       </div>
     </div>
   )
