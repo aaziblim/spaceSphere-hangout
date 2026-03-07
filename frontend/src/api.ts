@@ -222,6 +222,7 @@ export interface Livestream {
   description: string
   thumbnail_url: string | null
   status: 'scheduled' | 'live' | 'ended'
+  category: string
   viewer_count: number
   peak_viewers: number
   total_likes: number
@@ -233,6 +234,7 @@ export interface Livestream {
   duration: number
   is_live: boolean
   is_owner: boolean
+  total_messages: number
 }
 
 export interface LivestreamMessage {
@@ -247,8 +249,10 @@ export interface LivestreamMessage {
   is_pinned: boolean
 }
 
-export async function fetchLivestreams(status?: 'live' | 'scheduled' | 'all'): Promise<Livestream[]> {
-  const params = status ? { status } : {}
+export async function fetchLivestreams(status?: 'live' | 'scheduled' | 'all', category?: string): Promise<Livestream[]> {
+  const params: Record<string, string> = {}
+  if (status) params.status = status
+  if (category) params.category = category
   const { data } = await api.get('/streams/', { params })
   // Some deployments might paginate streams; normalize to a plain array
   if (Array.isArray(data)) return data as Livestream[]
@@ -261,7 +265,7 @@ export async function fetchLivestream(id: string): Promise<Livestream> {
   return data
 }
 
-export async function createLivestream(streamData: { title: string; description?: string }): Promise<Livestream> {
+export async function createLivestream(streamData: { title: string; description?: string; category?: string }): Promise<Livestream> {
   const { data } = await api.post<Livestream>('/streams/', streamData)
   return data
 }

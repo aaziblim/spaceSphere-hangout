@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.utils.html import format_html
-from .models import Post, Comment, Community, CommunityMembership, Livestream, LivestreamMessage, LivestreamSignal
+from .models import Post, Comment, Community, CommunityMembership, Livestream, LivestreamMessage, LivestreamSignal, LivestreamBan
 
 
 # ============ INLINES ============
@@ -95,8 +95,8 @@ class CommunityMembershipAdmin(admin.ModelAdmin):
 
 @admin.register(Livestream)
 class LivestreamAdmin(admin.ModelAdmin):
-    list_display = ('title', 'host', 'status', 'viewer_count', 'peak_viewers', 'total_likes', 'started_at', 'created_at')
-    list_filter = ('status', 'is_private', 'created_at')
+    list_display = ('title', 'host', 'status', 'category', 'viewer_count', 'peak_viewers', 'total_likes', 'started_at', 'created_at')
+    list_filter = ('status', 'category', 'is_private', 'created_at')
     search_fields = ('title', 'description', 'host__username')
     readonly_fields = ('id', 'viewer_count', 'peak_viewers', 'total_likes', 'created_at')
     inlines = [LivestreamMessageInline]
@@ -128,4 +128,12 @@ class LivestreamMessageAdmin(admin.ModelAdmin):
 class LivestreamSignalAdmin(admin.ModelAdmin):
     list_display = ('stream', 'role', 'kind', 'created_at')
     list_filter = ('role', 'kind')
+    readonly_fields = ('created_at',)
+
+
+@admin.register(LivestreamBan)
+class LivestreamBanAdmin(admin.ModelAdmin):
+    list_display = ('user', 'stream', 'banned_by', 'created_at')
+    list_filter = ('created_at',)
+    search_fields = ('user__username', 'stream__title')
     readonly_fields = ('created_at',)

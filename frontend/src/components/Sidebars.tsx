@@ -86,7 +86,7 @@ function UserStatsCard() {
       <Link to={`/user/${user.username}`} className="flex items-center gap-3 mb-4 group">
         <div className="w-12 h-12 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
           {(stats?.profile_image || user.profile?.image) ? (
-            <img src={stats?.profile_image || user.profile?.image || ''} alt="" className="w-full h-full object-cover" />
+            <img src={(stats?.profile_image || user.profile?.image)!} alt="" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none' }} />
           ) : (
             <div className="w-full h-full flex items-center justify-center text-white font-bold text-lg" style={{ backgroundColor: 'var(--accent)' }}>
               {user.username.charAt(0).toUpperCase()}

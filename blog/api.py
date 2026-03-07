@@ -1,5 +1,5 @@
 from django.db import models
-from django.db.models import Count, F, Value, FloatField, ExpressionWrapper
+from django.db.models import Count, F, Value, FloatField, ExpressionWrapper, Func
 from django.db.models.functions import Now, Extract, Log, Coalesce
 from rest_framework import viewsets, permissions, decorators, status
 from rest_framework.response import Response
@@ -386,11 +386,13 @@ def trending_posts_view(request):
 
     cutoff = timezone.now() - timezone.timedelta(days=recent_window_days)
 
-    age_seconds = ExpressionWrapper(
-        Extract(Now() - F('date_posted'), 'epoch'),
+    # SQLite doesn't support Extract on DurationField, use julianday difference instead
+    age_hours = ExpressionWrapper(
+        (Func(Now(), function='JULIANDAY', output_field=FloatField())
+         - Func(F('date_posted'), function='JULIANDAY', output_field=FloatField()))
+        * Value(24.0),
         output_field=FloatField(),
     )
-    age_hours = ExpressionWrapper(age_seconds / Value(3600.0), output_field=FloatField())
     views = Coalesce(F('views_count'), Value(0))
     views_boost = Log(views + Value(1.0), Value(10.0))
 
@@ -622,14 +624,15 @@ class LivestreamSerializer(serializers.ModelSerializer):
     duration = serializers.ReadOnlyField()
     is_live = serializers.ReadOnlyField()
     is_owner = serializers.SerializerMethodField()
-    
+    total_messages = serializers.ReadOnlyField()
+
     class Meta:
         model = Livestream
         fields = [
             'id', 'host', 'title', 'description', 'thumbnail_url',
-            'status', 'viewer_count', 'peak_viewers', 'total_likes',
+            'status', 'category', 'viewer_count', 'peak_viewers', 'total_likes',
             'scheduled_at', 'started_at', 'ended_at', 'created_at',
-            'is_private', 'duration', 'is_live', 'is_owner'
+            'is_private', 'duration', 'is_live', 'is_owner', 'total_messages'
         ]
         read_only_fields = ['id', 'host', 'viewer_count', 'peak_viewers', 'total_likes', 'started_at', 'ended_at']
     
@@ -682,10 +685,15 @@ class LivestreamViewSet(viewsets.ModelViewSet):
         elif status_filter != 'all':
             # Default: show live and recent ended (last 24h)
             queryset = queryset.filter(
-                models.Q(status='live') | 
+                models.Q(status='live') |
                 models.Q(status='scheduled') |
                 models.Q(status='ended', ended_at__gte=timezone.now() - timezone.timedelta(hours=24))
             )
+
+        # Filter by category
+        category_filter = self.request.query_params.get('category')
+        if category_filter:
+            queryset = queryset.filter(category=category_filter)
         
         # Order: live first, then scheduled, then ended
         return queryset.order_by(
@@ -724,8 +732,21 @@ class LivestreamViewSet(viewsets.ModelViewSet):
             return Response({'error': 'Only the host can end the stream'}, status=status.HTTP_403_FORBIDDEN)
         if stream.status != 'live':
             return Response({'error': 'Stream is not live'}, status=status.HTTP_400_BAD_REQUEST)
-        
+
         stream.end()
+
+        # Broadcast stream_ended to all connected WebSocket clients
+        try:
+            from channels.layers import get_channel_layer
+            from asgiref.sync import async_to_sync
+            channel_layer = get_channel_layer()
+            async_to_sync(channel_layer.group_send)(
+                f'stream_{stream.id}',
+                {'type': 'stream_ended', 'stream_id': str(stream.id)}
+            )
+        except Exception:
+            pass  # Don't fail the API call if channel layer is unavailable
+
         return Response(self.get_serializer(stream).data)
     
     @decorators.action(detail=True, methods=['delete'], permission_classes=[permissions.IsAuthenticated])
@@ -837,3 +858,43 @@ class LivestreamViewSet(viewsets.ModelViewSet):
         if excess:
             stream.signals.filter(id__in=[s.id for s in excess]).delete()
         return Response(LivestreamSignalSerializer(signal).data, status=status.HTTP_201_CREATED)
+
+    @decorators.action(detail=True, methods=['post'], url_path='ban', permission_classes=[permissions.IsAuthenticated])
+    def ban_user(self, request, id=None):
+        """Ban a user from stream chat (host only)"""
+        stream = self.get_object()
+        if stream.host != request.user:
+            return Response({'error': 'Only the host can ban users'}, status=status.HTTP_403_FORBIDDEN)
+
+        target_user_id = request.data.get('user_id')
+        if not target_user_id:
+            return Response({'error': 'user_id required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        try:
+            target = User.objects.get(id=target_user_id)
+        except User.DoesNotExist:
+            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        if target == request.user:
+            return Response({'error': 'Cannot ban yourself'}, status=status.HTTP_400_BAD_REQUEST)
+
+        from blog.models import LivestreamBan
+        LivestreamBan.objects.get_or_create(
+            stream=stream, user=target, defaults={'banned_by': request.user}
+        )
+
+        # Broadcast via WS
+        try:
+            from channels.layers import get_channel_layer
+            from asgiref.sync import async_to_sync
+            channel_layer = get_channel_layer()
+            async_to_sync(channel_layer.group_send)(
+                f'stream_{stream.id}',
+                {'type': 'user_banned', 'user_id': target.id}
+            )
+        except Exception:
+            pass
+
+        return Response({'detail': f'{target.username} banned from chat'})

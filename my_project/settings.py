@@ -274,9 +274,9 @@ DEFAULT_FILE_STORAGE = os.environ.get(
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 
-LOGIN_REDIRECT_URL = 'blog-home'  # Where to redirect after login
+LOGIN_REDIRECT_URL = '/'  # Where to redirect after login (React SPA root)
 LOGIN_URL = '/login/'               # URL to redirect unauthorized users
-LOGOUT_REDIRECT_URL = 'login'  # Optional: If you want immediate redirect
+LOGOUT_REDIRECT_URL = '/login/'  # Optional: If you want immediate redirect
 
 # Message tags
 MESSAGE_STORAGE = 'django.contrib.messages.storage.session.SessionStorage'
@@ -316,6 +316,11 @@ LOGGING = {
             'level': LOG_LEVEL,
             'propagate': True,
         },
+        'users.api': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
     },
 }
 
@@ -323,22 +328,12 @@ LOGGING = {
 
 SOCIALACCOUNT_PROVIDERS = {
     'google': {
-        'APP': {
-            'client_id': os.environ.get('GOOGLE_CLIENT_ID'),
-            'secret': os.environ.get('GOOGLE_CLIENT_SECRET'),
-            'key': '',
-        },
         'SCOPE': [
             'profile',
             'email',
         ],
     },
     'github': {
-        'APP': {
-            'client_id': os.environ.get('GITHUB_CLIENT_ID'),
-            'secret': os.environ.get('GITHUB_CLIENT_SECRET'),
-            'key': '',
-        },
         'SCOPE': [
             'user',
             'user:email',
@@ -369,6 +364,17 @@ SESSION_COOKIE_SAMESITE = 'Lax'
 CSRF_COOKIE_SAMESITE = 'Lax'
 SESSION_COOKIE_HTTPONLY = True
 CSRF_COOKIE_HTTPONLY = False  # Allow JS to read CSRF token
+SESSION_COOKIE_AGE = 60 * 60 * 24 * 7  # 1 week (default is 2 weeks)
+
+# Production security settings
+if ENVIRONMENT == 'production':
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_SSL_REDIRECT = True
+    SECURE_HSTS_SECONDS = 31536000  # 1 year
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
@@ -377,6 +383,14 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticatedOrReadOnly',
     ],
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.ScopedRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'login': '5/min',
+        'register': '3/min',
+        'password_change': '3/min',
+    },
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 6,
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',

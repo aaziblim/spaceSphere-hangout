@@ -1,9 +1,11 @@
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.models import User
+from django.contrib.auth.password_validation import validate_password
 from rest_framework import status, permissions
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.response import Response
 from rest_framework import serializers
+from rest_framework.throttling import ScopedRateThrottle
 from users.models import Profile, Follow, UserPublicKey
 from django.db.models import Count, Q
 from drf_spectacular.utils import (
@@ -13,6 +15,17 @@ from drf_spectacular.utils import (
     OpenApiResponse,
 )
 from typing import Optional, List
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+def _get_request_ip(request):
+    """Extract client IP from request."""
+    xff = request.META.get('HTTP_X_FORWARDED_FOR')
+    if xff:
+        return xff.split(',')[0].strip()
+    return request.META.get('REMOTE_ADDR', '')
 
 
 class ProfileSerializer(serializers.ModelSerializer):
@@ -39,24 +52,28 @@ class UserSerializer(serializers.ModelSerializer):
         fields = ['id', 'username', 'email', 'first_name', 'last_name', 'profile']
         read_only_fields = ['id', 'username']
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        # Pass request context to nested serializer
-        if 'context' in kwargs:
-            self.fields['profile'].context.update(kwargs['context'])
-
 
 class RegisterSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, min_length=6)
+    password = serializers.CharField(write_only=True, min_length=8)
+    email = serializers.EmailField(required=True)
 
     class Meta:
         model = User
         fields = ['username', 'email', 'password']
 
+    def validate_password(self, value):
+        validate_password(value)
+        return value
+
+    def validate_email(self, value):
+        if User.objects.filter(email__iexact=value).exists():
+            raise serializers.ValidationError('A user with this email already exists.')
+        return value
+
     def create(self, validated_data):
         user = User.objects.create_user(
             username=validated_data['username'],
-            email=validated_data.get('email', ''),
+            email=validated_data['email'],
             password=validated_data['password'],
         )
         return user
@@ -127,8 +144,10 @@ def user_view(request):
 )
 @api_view(['POST'])
 @permission_classes([permissions.AllowAny])
+@throttle_classes([ScopedRateThrottle])
 def login_view(request):
     """Log in a user."""
+    request.throttle_scope = 'login'
     username = request.data.get('username')
     password = request.data.get('password')
 
@@ -140,12 +159,18 @@ def login_view(request):
 
     user = authenticate(request, username=username, password=password)
     if user is None:
+        logger.warning(
+            'Failed login attempt for username=%s ip=%s',
+            username,
+            _get_request_ip(request),
+        )
         return Response(
             {'detail': 'Invalid credentials.'},
             status=status.HTTP_401_UNAUTHORIZED
         )
 
     login(request, user)
+    logger.info('Successful login for username=%s', username)
     serializer = UserSerializer(user, context={'request': request})
     return Response(serializer.data)
 
@@ -166,17 +191,70 @@ def logout_view(request):
 
 
 @extend_schema(
+    request=inline_serializer(
+        name='PasswordChangeRequest',
+        fields={
+            'current_password': serializers.CharField(),
+            'new_password': serializers.CharField(),
+        },
+    ),
+    responses={
+        200: OpenApiResponse(description='Password changed successfully.'),
+        400: OpenApiResponse(description='Validation error.'),
+    },
+)
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+@throttle_classes([ScopedRateThrottle])
+def password_change_view(request):
+    """Change the current user's password."""
+    request.throttle_scope = 'password_change'
+    current_password = request.data.get('current_password')
+    new_password = request.data.get('new_password')
+
+    if not current_password or not new_password:
+        return Response(
+            {'detail': 'Both current_password and new_password are required.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if not request.user.check_password(current_password):
+        return Response(
+            {'detail': 'Current password is incorrect.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        validate_password(new_password, user=request.user)
+    except Exception as e:
+        return Response(
+            {'detail': list(e.messages)},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    request.user.set_password(new_password)
+    request.user.save()
+    # Re-login so the session stays valid after password change
+    login(request, request.user, backend='django.contrib.auth.backends.ModelBackend')
+    logger.info('Password changed for username=%s', request.user.username)
+    return Response({'detail': 'Password changed successfully.'})
+
+
+@extend_schema(
     request=RegisterSerializer,
     responses={201: UserSerializer, 400: OpenApiResponse(description='Validation error')},
 )
 @api_view(['POST'])
 @permission_classes([permissions.AllowAny])
+@throttle_classes([ScopedRateThrottle])
 def register_view(request):
     """Register a new user."""
+    request.throttle_scope = 'register'
     serializer = RegisterSerializer(data=request.data)
     if serializer.is_valid():
         user = serializer.save()
-        login(request, user)
+        login(request, user, backend='django.contrib.auth.backends.ModelBackend')
+        logger.info('New user registered: username=%s', user.username)
         return Response(UserSerializer(user, context={'request': request}).data, status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 

@@ -40,6 +40,7 @@ urlpatterns = [
     path('api/auth/login/', users_api.login_view, name='api-login'),
     path('api/auth/logout/', users_api.logout_view, name='api-logout'),
     path('api/auth/register/', users_api.register_view, name='api-register'),
+    path('api/auth/password/', users_api.password_change_view, name='api-password-change'),
     path('api/users/following/', users_api.following_list_view, name='api-following-list'),
     path('api/users/<str:username>/', users_api.user_profile_view, name='api-user-profile'),
     path('api/users/<str:username>/follow/', users_api.follow_user_view, name='api-follow-user'),

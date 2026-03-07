@@ -124,25 +124,36 @@ class Livestream(models.Model):
         ('live', 'Live'),
         ('ended', 'Ended'),
     ]
-    
+    CATEGORY_CHOICES = [
+        ('gaming', 'Gaming'),
+        ('music', 'Music'),
+        ('coding', 'Coding'),
+        ('art', 'Art'),
+        ('cooking', 'Cooking'),
+        ('chat', 'Chat'),
+        ('education', 'Education'),
+        ('other', 'Other'),
+    ]
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     host = models.ForeignKey(User, on_delete=models.CASCADE, related_name='livestreams')
     title = models.CharField(max_length=100)
     description = models.TextField(blank=True, default='')
     thumbnail = models.ImageField(upload_to='stream_thumbnails', blank=True, null=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='scheduled')
-    
+    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default='chat')
+
     # Stream metadata
     viewer_count = models.PositiveIntegerField(default=0)
     peak_viewers = models.PositiveIntegerField(default=0)
     total_likes = models.PositiveIntegerField(default=0)
-    
+
     # Timestamps
     scheduled_at = models.DateTimeField(null=True, blank=True)
     started_at = models.DateTimeField(null=True, blank=True)
     ended_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
-    
+
     # Privacy
     is_private = models.BooleanField(default=False)
     
@@ -176,6 +187,10 @@ class Livestream(models.Model):
     def is_live(self):
         return self.status == 'live'
 
+    @property
+    def total_messages(self):
+        return self.messages.count()
+
 
 class LivestreamMessage(models.Model):
     """Chat messages during a livestream"""
@@ -207,3 +222,17 @@ class LivestreamSignal(models.Model):
 
     def __str__(self):
         return f'{self.stream_id} {self.role} {self.kind}'
+
+
+class LivestreamBan(models.Model):
+    """Ban a user from chat during a livestream"""
+    stream = models.ForeignKey(Livestream, on_delete=models.CASCADE, related_name='bans')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='stream_bans')
+    banned_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='stream_bans_issued')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('stream', 'user')
+
+    def __str__(self):
+        return f'{self.user.username} banned from {self.stream_id}'

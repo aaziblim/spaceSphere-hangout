@@ -4,18 +4,17 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   fetchLivestream,
   fetchStreamMessages,
-  sendStreamMessage,
-  joinStream,
-  leaveStream,
-  likeStream,
   endStream,
   deleteStream,
   fetchStreamSignals,
   sendStreamSignal,
+  createPost,
   type LivestreamMessage
 } from '../api'
 import { useAuth } from '../AuthContext'
 import { ConfirmationModal } from '../components/ConfirmationModal'
+import { StreamSummaryModal } from '../components/StreamSummaryModal'
+import { useLivestreamWebSocket } from '../hooks/useLivestreamWebSocket'
 
 function formatViewers(count: number): string {
   if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`
@@ -91,6 +90,18 @@ export default function StreamViewerPage() {
   const ICE_SERVERS: RTCIceServer[] = [
     { urls: 'stun:stun.l.google.com:19302' },
   ]
+
+  // Post-stream summary state
+  const [showSummary, setShowSummary] = useState(false)
+  const [recordingBlob, setRecordingBlob] = useState<Blob | null>(null)
+  const [isSavingPost, setIsSavingPost] = useState(false)
+
+  // Screen sharing (host only, desktop)
+  const [isScreenSharing, setIsScreenSharing] = useState(false)
+  const originalTrackRef = useRef<MediaStreamTrack | null>(null)
+
+  // Viewer panel
+  const [viewerPanelOpen, setViewerPanelOpen] = useState(false)
 
   // Auto-hide controls logic
   const resetControlsTimeout = useCallback(() => {
@@ -190,20 +201,17 @@ export default function StreamViewerPage() {
     refetchInterval: 5000
   })
 
-  // Fetch messages
-  const { data: messages = [] } = useQuery({
-    queryKey: ['stream-messages', id],
+  // Fetch initial messages once (not polling), then use WebSocket for real-time
+  const { data: initialMessages = [] } = useQuery({
+    queryKey: ['stream-messages-initial', id],
     queryFn: () => fetchStreamMessages(id!),
-    enabled: !!id && stream?.is_live,
-    refetchInterval: 2000
+    enabled: !!id && !!stream?.is_live,
+    staleTime: Infinity,
   })
 
-  // Join/leave stream
-  useEffect(() => {
-    if (!id || !stream?.is_live) return
-    joinStream(id)
-    return () => { leaveStream(id) }
-  }, [id, stream?.is_live])
+  // WebSocket for real-time chat, viewer count, likes
+  const ws = useLivestreamWebSocket(id, !!id && !!stream?.is_live, initialMessages)
+  const chatMessages = ws.messages
 
   // Duration timer
   useEffect(() => {
@@ -350,7 +358,7 @@ export default function StreamViewerPage() {
     if (chatContainerRef.current) {
       chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight
     }
-  }, [messages])
+  }, [chatMessages])
 
   // Initial controls timeout
   useEffect(() => {
@@ -362,27 +370,9 @@ export default function StreamViewerPage() {
     }
   }, [resetControlsTimeout])
 
-  // Send message mutation
-  const sendMutation = useMutation({
-    mutationFn: () => sendStreamMessage(id!, message),
-    onSuccess: () => {
-      setMessage('')
-      queryClient.invalidateQueries({ queryKey: ['stream-messages', id] })
-    }
-  })
-
-  // Like mutation
-  const likeMutation = useMutation({
-    mutationFn: () => likeStream(id!),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['stream', id] })
-    }
-  })
-
   // Recording refs
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
-  const [isUploading, setIsUploading] = useState(false)
 
   // Start recording when live
   useEffect(() => {
@@ -425,55 +415,28 @@ export default function StreamViewerPage() {
     }
   }, [stream?.is_live, stream?.host.id, user?.id])
 
-  // End stream mutation UPDATED
+  // End stream mutation - stores recording blob, shows summary modal
   const endMutation = useMutation({
     mutationFn: async () => {
       // 1. Stop recording
       if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
         mediaRecorderRef.current.stop()
-        // Wait for last chunk
         await new Promise(r => setTimeout(r, 500))
       }
 
-      // 2. Create Blob
+      // 2. Store blob if we have chunks (don't upload yet)
       if (chunksRef.current.length > 0) {
-        setIsUploading(true)
         const blob = new Blob(chunksRef.current, { type: 'video/webm' })
-        const file = new File([blob], `stream-${id}.webm`, { type: 'video/webm' })
-
-        // 3. Upload as Post
-        const formData = new FormData()
-        formData.append('title', `Live Replay: ${stream?.title}`)
-        formData.append('content', stream?.description || 'Livestream recording')
-        formData.append('post_video', file)
-
-        // Use axios directly to upload
-        try {
-          // Import needed here or assume global axios/api
-          // We need to use proper api import, so let's stick to using the createPost function but it takes specific struct
-          // Just using plain fetch/axios for this specific big upload to ensure custom handling if needed, 
-          // but actually createPost from api.ts is safer.
-          // Let's use api.createPost
-          const { createPost } = await import('../api')
-          await createPost({
-            title: `Live Replay: ${stream?.title || 'Untitled Stream'}`,
-            content: stream?.description || 'Livestream recording',
-            post_video: file
-          })
-          console.log('Recording uploaded successfully')
-        } catch (err) {
-          console.error('Failed to upload recording', err)
-        } finally {
-          setIsUploading(false)
-        }
+        setRecordingBlob(blob)
       }
 
-      // 4. Actually End Stream API call
+      // 3. End stream via API
       return endStream(id!)
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['stream', id] })
       setEndModalOpen(false)
+      setShowSummary(true)
     }
   })
 
@@ -487,11 +450,88 @@ export default function StreamViewerPage() {
 
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!message.trim() || sendMutation.isPending) return
-    sendMutation.mutate()
+    if (!message.trim()) return
+    ws.sendChatMessage(message.trim())
+    setMessage('')
+  }
+
+  // Save recording as a post
+  const handleSaveAsPost = async () => {
+    if (!recordingBlob) return
+    setIsSavingPost(true)
+    try {
+      const file = new File([recordingBlob], `stream-${id}.webm`, { type: 'video/webm' })
+      await createPost({
+        title: `Live Replay: ${stream?.title || 'Untitled Stream'}`,
+        content: stream?.description || 'Livestream recording',
+        post_video: file,
+      })
+      setShowSummary(false)
+      navigate('/live')
+    } catch (err) {
+      console.error('Failed to save recording', err)
+    } finally {
+      setIsSavingPost(false)
+    }
+  }
+
+  // Discard recording and leave
+  const handleDiscard = () => {
+    setRecordingBlob(null)
+    setShowSummary(false)
+    navigate('/live')
+  }
+
+  // Toggle screen sharing (host only, desktop)
+  const toggleScreenShare = async () => {
+    if (!pcRef.current) return
+    const senders = pcRef.current.getSenders()
+    const videoSender = senders.find(s => s.track?.kind === 'video')
+    if (!videoSender) return
+
+    if (isScreenSharing) {
+      if (originalTrackRef.current) {
+        await videoSender.replaceTrack(originalTrackRef.current)
+        if (videoRef.current) {
+          const s = new MediaStream([originalTrackRef.current])
+          videoRef.current.srcObject = s
+        }
+      }
+      setIsScreenSharing(false)
+    } else {
+      try {
+        const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true })
+        const screenTrack = screenStream.getVideoTracks()[0]
+        originalTrackRef.current = videoSender.track
+        await videoSender.replaceTrack(screenTrack)
+        if (videoRef.current) {
+          videoRef.current.srcObject = screenStream
+        }
+        screenTrack.onended = async () => {
+          if (originalTrackRef.current && videoSender) {
+            await videoSender.replaceTrack(originalTrackRef.current)
+            if (videoRef.current) {
+              const restored = new MediaStream([originalTrackRef.current])
+              videoRef.current.srcObject = restored
+            }
+          }
+          setIsScreenSharing(false)
+        }
+        setIsScreenSharing(true)
+      } catch (err) {
+        console.error('Screen share failed:', err)
+      }
+    }
   }
 
   const isHost = user?.id === stream?.host.id
+
+  // Handle stream ended via WS (for viewers)
+  useEffect(() => {
+    if (ws.streamEnded && !isHost) {
+      queryClient.invalidateQueries({ queryKey: ['stream', id] })
+    }
+  }, [ws.streamEnded, isHost, queryClient, id])
 
   if (isLoading) {
     return (
@@ -620,6 +660,14 @@ export default function StreamViewerPage() {
             </div>
           )}
 
+          {/* Screen sharing indicator */}
+          {isScreenSharing && (
+            <div className="absolute top-14 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-full bg-green-500/80 backdrop-blur text-white text-xs font-medium flex items-center gap-1.5 z-10">
+              <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+              Sharing Screen
+            </div>
+          )}
+
           {/* Controls Overlay */}
           <div
             className={`absolute inset-0 transition-opacity duration-300 pointer-events-none ${showControls ? 'opacity-100' : 'opacity-0'
@@ -694,6 +742,24 @@ export default function StreamViewerPage() {
                     </svg>
                   </button>
                 )}
+                {/* Screen share toggle (host only, desktop) */}
+                {isHost && stream.is_live && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      toggleScreenShare()
+                    }}
+                    className={`hidden md:flex w-9 h-9 md:w-10 md:h-10 rounded-full backdrop-blur-md items-center justify-center text-white transition-all hover:bg-black/60 active:scale-95 ${
+                      isScreenSharing ? 'bg-green-500/60' : 'bg-black/40'
+                    }`}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4 md:w-5 md:h-5">
+                      <rect x="2" y="3" width="20" height="14" rx="2" />
+                      <path d="M8 21h8M12 17v4" />
+                    </svg>
+                  </button>
+                )}
               </div>
             </div>
 
@@ -743,7 +809,7 @@ export default function StreamViewerPage() {
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4 md:w-5 md:h-5">
                         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                       </svg>
-                      <span>{messages.length}</span>
+                      <span>{chatMessages.length}</span>
                     </button>
                   )}
 
@@ -753,9 +819,9 @@ export default function StreamViewerPage() {
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation()
-                        if (user) likeMutation.mutate()
+                        if (user) ws.sendLike()
                       }}
-                      disabled={!user || likeMutation.isPending}
+                      disabled={!user}
                       className="w-9 h-9 md:w-10 md:h-10 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center text-white transition-all hover:bg-red-500/80 active:scale-95 disabled:opacity-50"
                     >
                       <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 md:w-5 md:h-5">
@@ -795,7 +861,7 @@ export default function StreamViewerPage() {
                       disabled={endMutation.isPending}
                       className="h-9 md:h-10 px-3 md:px-4 rounded-full bg-red-500 text-white font-medium text-xs md:text-sm transition-all hover:bg-red-600 active:scale-95 disabled:opacity-50"
                     >
-                      {endMutation.isPending || isUploading ? 'Saving...' : 'End & Save'}
+                      {endMutation.isPending ? 'Ending...' : 'End Stream'}
                     </button>
                   )}
                 </div>
@@ -827,7 +893,7 @@ export default function StreamViewerPage() {
                 <h3 className="font-semibold text-white text-base">Live Chat</h3>
                 <div className="flex items-center gap-3">
                   <span className="text-xs px-2 py-0.5 rounded-full bg-white/10 text-white/70">
-                    {messages.length}
+                    {chatMessages.length}
                   </span>
                   <button
                     type="button"
@@ -846,7 +912,7 @@ export default function StreamViewerPage() {
                 ref={chatContainerRef}
                 className="flex-1 overflow-y-auto p-4 space-y-1"
               >
-                {messages.length === 0 ? (
+                {chatMessages.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-full text-center">
                     <div className="w-14 h-14 rounded-full bg-white/5 flex items-center justify-center mb-3">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-6 h-6 text-white/30">
@@ -854,10 +920,10 @@ export default function StreamViewerPage() {
                       </svg>
                     </div>
                     <p className="text-white/40 text-sm">No messages yet</p>
-                    <p className="text-white/30 text-xs mt-1">Be the first to say hi! 👋</p>
+                    <p className="text-white/30 text-xs mt-1">Be the first to say hi!</p>
                   </div>
                 ) : (
-                  messages.map(msg => (
+                  chatMessages.map(msg => (
                     <ChatMessage key={msg.id} message={msg} />
                   ))
                 )}
@@ -877,7 +943,7 @@ export default function StreamViewerPage() {
                     />
                     <button
                       type="submit"
-                      disabled={!message.trim() || sendMutation.isPending}
+                      disabled={!message.trim()}
                       className="w-11 h-11 rounded-full flex items-center justify-center text-white transition-all disabled:opacity-40"
                       style={{ backgroundColor: 'var(--accent)' }}
                     >
@@ -922,7 +988,7 @@ export default function StreamViewerPage() {
                 <h3 className="font-semibold text-white text-base">Live Chat</h3>
                 <div className="flex items-center gap-3">
                   <span className="text-xs px-2.5 py-1 rounded-full bg-white/10 text-white/70">
-                    {messages.length} messages
+                    {chatMessages.length} messages
                   </span>
                   <button
                     type="button"
@@ -940,7 +1006,7 @@ export default function StreamViewerPage() {
               <div
                 className="flex-1 overflow-y-auto px-4 py-3 space-y-1"
               >
-                {messages.length === 0 ? (
+                {chatMessages.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-full text-center">
                     <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mb-4">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-7 h-7 text-white/30">
@@ -948,10 +1014,10 @@ export default function StreamViewerPage() {
                       </svg>
                     </div>
                     <p className="text-white/50 text-sm font-medium">No messages yet</p>
-                    <p className="text-white/30 text-xs mt-1">Start the conversation! 💬</p>
+                    <p className="text-white/30 text-xs mt-1">Start the conversation!</p>
                   </div>
                 ) : (
-                  messages.map(msg => (
+                  chatMessages.map(msg => (
                     <ChatMessage key={msg.id} message={msg} />
                   ))
                 )}
@@ -971,7 +1037,7 @@ export default function StreamViewerPage() {
                     />
                     <button
                       type="submit"
-                      disabled={!message.trim() || sendMutation.isPending}
+                      disabled={!message.trim()}
                       className="w-12 h-12 rounded-2xl flex items-center justify-center text-white transition-all active:scale-95 disabled:opacity-40"
                       style={{ backgroundColor: 'var(--accent)' }}
                     >
@@ -1004,7 +1070,7 @@ export default function StreamViewerPage() {
           className="flex items-center justify-between mt-3 px-4 py-3 rounded-xl"
           style={{ backgroundColor: 'var(--bg-primary)' }}
         >
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => setViewerPanelOpen(true)}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-3.5 h-3.5 opacity-50" style={{ color: 'var(--text-secondary)' }}>
               <path d="M2.42 12.713c-.14-.247-.14-.559 0-.806 1.053-1.856 4.06-6.287 9.58-6.287 5.52 0 8.527 4.43 9.58 6.287.14.247.14.559 0 .806-1.053 1.856-4.06 6.287-9.58 6.287-5.52 0-8.527-4.43-9.58-6.287z" />
               <circle cx="12" cy="12.31" r="3" />
@@ -1035,7 +1101,7 @@ export default function StreamViewerPage() {
               <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
             </svg>
             <span className="text-sm font-semibold tabular-nums" style={{ color: 'var(--text-primary)' }}>
-              {formatViewers(stream.total_likes)}
+              {formatViewers(ws.totalLikes || stream.total_likes)}
             </span>
             <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>likes</span>
           </div>
@@ -1082,7 +1148,7 @@ export default function StreamViewerPage() {
               <div>
                 <h3 className="font-bold text-sm leading-tight" style={{ color: 'var(--text-primary)' }}>Live Chat</h3>
                 <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                  {chatOpen ? 'Join the conversation' : `${messages.length} messages`}
+                  {chatOpen ? 'Join the conversation' : `${chatMessages.length} messages`}
                 </p>
               </div>
             </div>
@@ -1107,7 +1173,7 @@ export default function StreamViewerPage() {
                 className="flex-1 overflow-y-auto p-4 space-y-4"
                 style={{ backgroundColor: 'var(--bg-secondary)' }}
               >
-                {messages.length === 0 ? (
+                {chatMessages.length === 0 ? (
                   <div className="h-full flex flex-col items-center justify-center text-center p-8 opacity-50">
                     <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-500/20 to-blue-500/20 flex items-center justify-center mb-4">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-8 h-8 text-white/50">
@@ -1115,10 +1181,10 @@ export default function StreamViewerPage() {
                       </svg>
                     </div>
                     <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>It's quiet here...</p>
-                    <p className="text-xs mt-1" style={{ color: 'var(--text-tertiary)' }}>Be the first to say hello! 👋</p>
+                    <p className="text-xs mt-1" style={{ color: 'var(--text-tertiary)' }}>Be the first to say hello!</p>
                   </div>
                 ) : (
-                  messages.map(msg => (
+                  chatMessages.map(msg => (
                     <div key={msg.id} className="group flex items-start gap-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
                       <div className="w-8 h-8 rounded-full overflow-hidden shrink-0 shadow-sm ring-1 ring-white/5 mt-0.5">
                         {msg.author.profile_image ? (
@@ -1160,12 +1226,7 @@ export default function StreamViewerPage() {
               >
                 {user ? (
                   <form
-                    onSubmit={(e) => {
-                      e.preventDefault()
-                      if (message.trim() && !sendMutation.isPending) {
-                        sendMutation.mutate()
-                      }
-                    }}
+                    onSubmit={handleSend}
                     className="relative"
                   >
                     <input
@@ -1184,17 +1245,13 @@ export default function StreamViewerPage() {
                     />
                     <button
                       type="submit"
-                      disabled={!message.trim() || sendMutation.isPending}
+                      disabled={!message.trim()}
                       className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-lg transition-all hover:bg-black/5 disabled:opacity-30 disabled:hover:bg-transparent"
                       style={{ color: message.trim() ? 'var(--accent)' : 'var(--text-tertiary)' }}
                     >
-                      {sendMutation.isPending ? (
-                        <div className="w-4 h-4 border-2 border-[var(--accent)] border-t-transparent rounded-full animate-spin" />
-                      ) : (
-                        <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
-                          <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
-                        </svg>
-                      )}
+                      <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+                        <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+                      </svg>
                     </button>
                   </form>
                 ) : (
@@ -1248,6 +1305,74 @@ export default function StreamViewerPage() {
         isDestructive={true}
         isLoading={deleteMutation.isPending}
       />
+
+      {/* Post-Stream Summary Modal */}
+      <StreamSummaryModal
+        isOpen={showSummary}
+        stats={{
+          duration: stream.duration || duration,
+          peakViewers: stream.peak_viewers,
+          totalLikes: ws.totalLikes || stream.total_likes,
+          totalMessages: chatMessages.length,
+        }}
+        hasRecording={!!recordingBlob}
+        onSaveAsPost={handleSaveAsPost}
+        onDiscard={handleDiscard}
+        isSaving={isSavingPost}
+      />
+
+      {/* Viewer List Panel */}
+      {viewerPanelOpen && (
+        <div className="fixed inset-0 z-[90] flex items-start justify-end p-4 pt-16">
+          <div className="absolute inset-0 bg-black/30" onClick={() => setViewerPanelOpen(false)} />
+          <div className="relative w-80 max-h-[70vh] bg-[#1c1c1e] rounded-2xl border border-white/10 overflow-hidden shadow-2xl">
+            <div className="p-4 border-b border-white/10 flex items-center justify-between">
+              <h3 className="text-white font-bold">Viewers ({ws.viewers.length})</h3>
+              <button
+                type="button"
+                onClick={() => setViewerPanelOpen(false)}
+                className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white/70 hover:bg-white/20 transition-colors"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="overflow-y-auto max-h-[calc(70vh-60px)] p-2">
+              {ws.viewers.length === 0 ? (
+                <p className="text-white/40 text-sm text-center py-8">No viewers connected</p>
+              ) : (
+                ws.viewers.map(v => (
+                  <div key={v.id} className="flex items-center gap-3 p-3 rounded-xl hover:bg-white/5">
+                    <div className="w-8 h-8 rounded-full overflow-hidden shrink-0">
+                      {v.profile_image ? (
+                        <img src={v.profile_image} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <div
+                          className="w-full h-full flex items-center justify-center text-white font-semibold text-xs"
+                          style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}
+                        >
+                          {v.username.slice(0, 1).toUpperCase()}
+                        </div>
+                      )}
+                    </div>
+                    <span className="text-white text-sm font-medium flex-1 truncate">{v.username}</span>
+                    {isHost && v.id !== user?.id && (
+                      <button
+                        type="button"
+                        onClick={() => ws.banUser(v.id)}
+                        className="text-xs text-red-400 hover:text-red-300 font-medium px-2 py-1 rounded-lg hover:bg-red-500/10 transition-colors"
+                      >
+                        Ban
+                      </button>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

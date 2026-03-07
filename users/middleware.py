@@ -46,8 +46,8 @@ class JWTAuthMiddleware(BaseMiddleware):
 
         if token:
             scope['user'] = await get_user_from_token(token)
-        else:
-            scope['user'] = AnonymousUser()
+        # If no token, don't set AnonymousUser -- let AuthMiddlewareStack
+        # handle session cookie auth as a fallback.
 
         return await super().__call__(scope, receive, send)
 

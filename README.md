@@ -10,7 +10,7 @@ Spherespace is a real-time social platform for creators and communities. It comb
 | Real-time Chat | WebSocket messaging, typing indicators, read receipts, message requests |
 | Gamification | Achievement badges, activity streaks, karma system |
 | Creators | Verified badges, analytics dashboard, payment integration |
-| Live Streaming | Broadcasting, chat overlay, viewer count, host controls |
+| Live Streaming | WebSocket chat, screen sharing, viewer moderation, stream categories, post-stream summary |
 | UI/UX | Dark/light themes, skeleton loading, micro-interactions |
 
 ## Screenshots
@@ -81,15 +81,17 @@ my_project/
 │   ├── api.py           # REST endpoints
 │   └── consumers.py     # WebSocket consumers
 ├── blog/                # Content management
-│   ├── models.py        # Post, Comment, Community
-│   └── api.py           # Posts, comments, communities API
+│   ├── models.py        # Post, Comment, Community, Livestream, LivestreamBan
+│   ├── api.py           # Posts, comments, communities, livestreaming API
+│   ├── consumers.py     # Livestream WebSocket consumer
+│   └── routing.py       # WebSocket URL routing
 ├── payments/            # Paystack integration
 │   └── api.py           # Payment flows
 └── frontend/            # React application
     ├── src/
     │   ├── components/  # UI components
     │   ├── pages/       # Page components
-    │   ├── hooks/       # Custom hooks
+    │   ├── hooks/       # Custom hooks (chat WS, livestream WS)
     │   └── api.ts       # API client
     └── index.html
 ```
@@ -159,6 +161,44 @@ sequenceDiagram
     WS->>U2: new_message {from: "userA", content: "Hey!"}
     U2->>WS: mark_read {message_id: "123"}
     WS->>U1: messages_read {ids: ["123"]}
+```
+
+---
+
+## Live Streaming Architecture
+
+```mermaid
+sequenceDiagram
+    participant Host as Host (Browser)
+    participant WS as WebSocket Server
+    participant API as REST API
+    participant Viewer as Viewer (Browser)
+
+    Host->>API: POST /streams/ (title, category)
+    API-->>Host: Stream created (scheduled)
+    Host->>API: POST /streams/{id}/go_live/
+    API-->>Host: Stream is live
+
+    Host->>WS: Connect /ws/livestream/{id}/
+    Viewer->>WS: Connect /ws/livestream/{id}/
+    WS-->>Host: viewer_joined {user}
+    WS-->>Viewer: viewer_joined {user}
+
+    Viewer->>WS: chat_message {content}
+    WS-->>Host: chat_message {message}
+    WS-->>Viewer: chat_message {message}
+
+    Viewer->>WS: like
+    WS-->>Host: like_sent {total_likes}
+    WS-->>Viewer: like_sent {total_likes}
+
+    Host->>WS: ban_user {user_id}
+    WS-->>Viewer: user_banned {user_id}
+
+    Host->>API: POST /streams/{id}/end_stream/
+    WS-->>Viewer: stream_ended
+    Note over Host: Summary modal shown
+    Host->>API: POST /posts/ (recording) or discard
 ```
 
 ---
@@ -290,10 +330,16 @@ GET  /api/achievements/pending/
 
 # Livestreams
 GET  /api/streams/
-POST /api/streams/              # Create stream
+POST /api/streams/              # Create stream (with category)
 POST /api/streams/{id}/go_live/ # Start broadcasting
 POST /api/streams/{id}/end_stream/
 DELETE /api/streams/{id}/delete_stream/
+GET  /api/streams/{id}/messages/ # Chat history
+POST /api/streams/{id}/like/
+POST /api/streams/{id}/ban_user/ # Host moderation
+
+# Livestream WebSocket
+WS   /ws/livestream/{id}/       # Real-time chat, likes, viewer tracking
 ```
 
 ## Environment Variables
@@ -386,10 +432,15 @@ Shimmer loading states across all pages for premium feel.
 - Light mode
 - System preference detection
 
-### Live Experience
+### Live Streaming
+- Real-time WebSocket chat (replaces REST polling) with auto-reconnect
+- Stream categories (Gaming, Music, Coding, Art, Cooking, Chat, Education, Other) with color-coded chips
+- Post-stream choice: save recording as a post or discard after ending
+- Stream summary modal with stats (duration, peak viewers, likes, messages)
+- Screen sharing for hosts (desktop only, via `getDisplayMedia` + `replaceTrack`)
+- Viewer list panel with host moderation (ban users from chat)
 - Premium transparent overlays for stream controls
-- Confirmation dialogs for critical actions
-- Real-time hearts and chat overlay
+- Confirmation dialogs for critical actions (end stream, delete)
 
 ## License
 

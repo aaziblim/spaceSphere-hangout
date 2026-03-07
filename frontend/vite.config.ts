@@ -12,9 +12,19 @@ export default defineConfig({
         changeOrigin: true,
         cookieDomainRewrite: 'localhost',
       },
+      '/accounts': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+        cookieDomainRewrite: 'localhost',
+      },
       '/media': {
         target: 'http://127.0.0.1:8000',
         changeOrigin: true,
+      },
+      '/ws': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+        ws: true,
       },
     },
   },

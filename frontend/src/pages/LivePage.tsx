@@ -19,6 +19,25 @@ function formatDuration(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
+const CATEGORIES = [
+  { value: 'gaming', label: 'Gaming', color: '#7c3aed' },
+  { value: 'music', label: 'Music', color: '#ec4899' },
+  { value: 'coding', label: 'Coding', color: '#06b6d4' },
+  { value: 'art', label: 'Art', color: '#f59e0b' },
+  { value: 'cooking', label: 'Cooking', color: '#f97316' },
+  { value: 'chat', label: 'Chat', color: '#22c55e' },
+  { value: 'education', label: 'Education', color: '#3b82f6' },
+  { value: 'other', label: 'Other', color: '#6b7280' },
+] as const
+
+function getCategoryColor(category: string): string {
+  return CATEGORIES.find(c => c.value === category)?.color || '#6b7280'
+}
+
+function getCategoryLabel(category: string): string {
+  return CATEGORIES.find(c => c.value === category)?.label || category
+}
+
 function LiveStreamCard({ stream }: { stream: Livestream }) {
   return (
     <Link
@@ -85,6 +104,16 @@ function LiveStreamCard({ stream }: { stream: Livestream }) {
             {formatViewers(stream.viewer_count)}
           </div>
         )}
+
+        {/* Category badge */}
+        {stream.category && (
+          <div
+            className="absolute bottom-3 left-3 px-2 py-1 rounded-lg text-white text-[10px] font-bold uppercase tracking-wider"
+            style={{ backgroundColor: getCategoryColor(stream.category) }}
+          >
+            {getCategoryLabel(stream.category)}
+          </div>
+        )}
       </div>
 
       {/* Info */}
@@ -137,6 +166,7 @@ function GoLiveModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void
   const queryClient = useQueryClient()
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
+  const [category, setCategory] = useState('chat')
   const [step, setStep] = useState<'setup' | 'ready'>('setup')
   const [createdStream, setCreatedStream] = useState<Livestream | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
@@ -184,7 +214,7 @@ function GoLiveModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void
   }, [isOpen, facingMode])
 
   const createMutation = useMutation({
-    mutationFn: () => createLivestream({ title, description }),
+    mutationFn: () => createLivestream({ title, description, category }),
     onSuccess: (stream) => {
       setFormError(null)
       setCreatedStream(stream)
@@ -306,6 +336,30 @@ function GoLiveModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void
                   } as React.CSSProperties}
                 />
               </div>
+
+              {/* Category selector */}
+              <div>
+                <label className="block text-sm font-medium mb-2" style={{ color: 'var(--text-primary)' }}>
+                  Category
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {CATEGORIES.map(cat => (
+                    <button
+                      key={cat.value}
+                      type="button"
+                      onClick={() => setCategory(cat.value)}
+                      className="px-3 py-1.5 rounded-full text-xs font-medium transition-all"
+                      style={{
+                        backgroundColor: category === cat.value ? cat.color : 'var(--bg-tertiary)',
+                        color: category === cat.value ? 'white' : 'var(--text-secondary)',
+                        border: category === cat.value ? 'none' : '1px solid var(--border)',
+                      }}
+                    >
+                      {cat.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
 
             <div className="flex gap-2 sm:gap-3 mt-4 sm:mt-6">
@@ -412,11 +466,12 @@ export default function LivePage() {
   const queryClient = useQueryClient()
   const [showGoLive, setShowGoLive] = useState(false)
   const [filter, setFilter] = useState<'all' | 'live'>('all')
+  const [categoryFilter, setCategoryFilter] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<Livestream | null>(null)
 
   const { data: streams = [], isLoading } = useQuery({
-    queryKey: ['streams', filter],
-    queryFn: () => fetchLivestreams(filter === 'live' ? 'live' : undefined),
+    queryKey: ['streams', filter, categoryFilter],
+    queryFn: () => fetchLivestreams(filter === 'live' ? 'live' : undefined, categoryFilter || undefined),
     refetchInterval: 10000 // Refresh every 10s
   })
 
@@ -544,6 +599,37 @@ export default function LivePage() {
             }}
           >
             {tab === 'all' ? 'All' : '🔴 Live Now'}
+          </button>
+        ))}
+      </div>
+
+      {/* Category filter chips */}
+      <div className="flex flex-wrap gap-2 mb-6">
+        <button
+          type="button"
+          onClick={() => setCategoryFilter('')}
+          className="px-3 py-1.5 rounded-full text-xs font-medium transition-all"
+          style={{
+            backgroundColor: categoryFilter === '' ? 'var(--accent)' : 'var(--bg-tertiary)',
+            color: categoryFilter === '' ? 'white' : 'var(--text-secondary)',
+            border: categoryFilter === '' ? 'none' : '1px solid var(--border)',
+          }}
+        >
+          All Categories
+        </button>
+        {CATEGORIES.map(cat => (
+          <button
+            key={cat.value}
+            type="button"
+            onClick={() => setCategoryFilter(prev => prev === cat.value ? '' : cat.value)}
+            className="px-3 py-1.5 rounded-full text-xs font-medium transition-all"
+            style={{
+              backgroundColor: categoryFilter === cat.value ? cat.color : 'var(--bg-tertiary)',
+              color: categoryFilter === cat.value ? 'white' : 'var(--text-secondary)',
+              border: categoryFilter === cat.value ? 'none' : '1px solid var(--border)',
+            }}
+          >
+            {cat.label}
           </button>
         ))}
       </div>
