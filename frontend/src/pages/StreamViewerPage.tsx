@@ -1325,13 +1325,17 @@ export default function StreamViewerPage() {
       {viewerPanelOpen && (
         <div className="fixed inset-0 z-[90] flex items-start justify-end p-4 pt-16">
           <div className="absolute inset-0 bg-black/30" onClick={() => setViewerPanelOpen(false)} />
-          <div className="relative w-80 max-h-[70vh] bg-[#1c1c1e] rounded-2xl border border-white/10 overflow-hidden shadow-2xl">
-            <div className="p-4 border-b border-white/10 flex items-center justify-between">
-              <h3 className="text-white font-bold">Viewers ({ws.viewers.length})</h3>
+          <div
+            className="relative w-80 max-h-[70vh] rounded-2xl overflow-hidden shadow-2xl"
+            style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border)' }}
+          >
+            <div className="p-4 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
+              <h3 className="font-bold" style={{ color: 'var(--text-primary)' }}>Viewers ({ws.viewers.length})</h3>
               <button
                 type="button"
                 onClick={() => setViewerPanelOpen(false)}
-                className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white/70 hover:bg-white/20 transition-colors"
+                className="w-8 h-8 rounded-full flex items-center justify-center transition-colors"
+                style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
                   <path d="M18 6L6 18M6 6l12 12" />
@@ -1340,10 +1344,16 @@ export default function StreamViewerPage() {
             </div>
             <div className="overflow-y-auto max-h-[calc(70vh-60px)] p-2">
               {ws.viewers.length === 0 ? (
-                <p className="text-white/40 text-sm text-center py-8">No viewers connected</p>
+                <p className="text-sm text-center py-8" style={{ color: 'var(--text-tertiary)' }}>No viewers connected</p>
               ) : (
                 ws.viewers.map(v => (
-                  <div key={v.id} className="flex items-center gap-3 p-3 rounded-xl hover:bg-white/5">
+                  <div
+                    key={v.id}
+                    className="flex items-center gap-3 p-3 rounded-xl transition-colors"
+                    style={{ cursor: 'default' }}
+                    onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)'}
+                    onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+                  >
                     <div className="w-8 h-8 rounded-full overflow-hidden shrink-0">
                       {v.profile_image ? (
                         <img src={v.profile_image} alt="" className="w-full h-full object-cover" />
@@ -1356,7 +1366,7 @@ export default function StreamViewerPage() {
                         </div>
                       )}
                     </div>
-                    <span className="text-white text-sm font-medium flex-1 truncate">{v.username}</span>
+                    <span className="text-sm font-medium flex-1 truncate" style={{ color: 'var(--text-primary)' }}>{v.username}</span>
                     {isHost && v.id !== user?.id && (
                       <button
                         type="button"

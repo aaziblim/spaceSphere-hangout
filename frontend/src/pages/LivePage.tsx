@@ -1,9 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { fetchLivestreams, fetchMyStreams, createLivestream, goLive, deleteStream, type Livestream } from '../api'
+import { fetchLivestreams, createLivestream, goLive, type Livestream } from '../api'
 import { useAuth } from '../AuthContext'
-import { ConfirmationModal } from '../components/ConfirmationModal'
 
 function formatViewers(count: number): string {
   if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`
@@ -463,49 +462,21 @@ function GoLiveModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void
 
 export default function LivePage() {
   const { user } = useAuth()
-  const queryClient = useQueryClient()
   const [showGoLive, setShowGoLive] = useState(false)
   const [filter, setFilter] = useState<'all' | 'live'>('all')
   const [categoryFilter, setCategoryFilter] = useState('')
-  const [deleteTarget, setDeleteTarget] = useState<Livestream | null>(null)
 
   const { data: streams = [], isLoading } = useQuery({
     queryKey: ['streams', filter, categoryFilter],
     queryFn: () => fetchLivestreams(filter === 'live' ? 'live' : undefined, categoryFilter || undefined),
-    refetchInterval: 10000 // Refresh every 10s
+    refetchInterval: 10000
   })
-
-  // Fetch user's own streams
-  const { data: myStreams = [] } = useQuery({
-    queryKey: ['myStreams'],
-    queryFn: fetchMyStreams,
-    enabled: !!user
-  })
-
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => deleteStream(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['streams'] })
-      queryClient.invalidateQueries({ queryKey: ['myStreams'] })
-      setDeleteTarget(null)
-    }
-  })
-
-  const liveStreams = streams.filter(s => s.is_live)
-  const otherStreams = streams.filter(s => !s.is_live)
-  const myEndedStreams = myStreams.filter(s => s.status === 'ended')
 
   return (
     <div className="w-full">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>Live</h1>
-          <p className="text-sm mt-0.5" style={{ color: 'var(--text-secondary)' }}>
-            {liveStreams.length} streaming now
-          </p>
-        </div>
-
+        <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>Live</h1>
         {user && (
           <button
             type="button"
@@ -522,118 +493,66 @@ export default function LivePage() {
         )}
       </div>
 
-      {/* My Streams Section - Only for logged in users with past streams */}
-      {user && myEndedStreams.length > 0 && (
-        <section className="mb-8">
-          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
-            📹 My Streams
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {myEndedStreams.slice(0, 4).map(stream => (
-              <div
-                key={stream.id}
-                className="group relative rounded-2xl overflow-hidden transition-all duration-300 hover:translate-y-[-2px]"
-                style={{ backgroundColor: 'var(--bg-primary)', boxShadow: 'var(--card-shadow)' }}
-              >
-                <Link to={`/live/${stream.id}`}>
-                  <div
-                    className="relative aspect-video overflow-hidden"
-                    style={{ backgroundColor: 'var(--bg-tertiary)' }}
-                  >
-                    {stream.thumbnail_url ? (
-                      <img src={stream.thumbnail_url} alt="" className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <div className="w-16 h-16 rounded-full flex items-center justify-center" style={{ backgroundColor: 'var(--accent)', opacity: 0.2 }}>
-                          <svg viewBox="0 0 24 24" fill="currentColor" className="w-8 h-8" style={{ color: 'var(--accent)' }}>
-                            <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z" />
-                          </svg>
-                        </div>
-                      </div>
-                    )}
-                    <div className="absolute bottom-2 left-2 px-2 py-1 rounded-lg bg-black/60 text-white text-xs font-medium">
-                      {formatDuration(stream.duration)}
-                    </div>
-                    <div className="absolute bottom-2 right-2 flex gap-2">
-                      <span className="px-2 py-1 rounded-lg bg-black/60 text-white text-xs">👁 {formatViewers(stream.peak_viewers)}</span>
-                      <span className="px-2 py-1 rounded-lg bg-black/60 text-white text-xs">❤️ {formatViewers(stream.total_likes)}</span>
-                    </div>
-                  </div>
-                  <div className="p-3">
-                    <h3 className="font-semibold text-sm truncate" style={{ color: 'var(--text-primary)' }}>{stream.title}</h3>
-                    <p className="text-xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>
-                      {new Date(stream.ended_at || stream.created_at).toLocaleDateString()}
-                    </p>
-                  </div>
-                </Link>
-                <button
-                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); setDeleteTarget(stream) }}
-                  className="absolute top-2 right-2 w-8 h-8 rounded-full flex items-center justify-center opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
-                  style={{ backgroundColor: 'rgba(239, 68, 68, 0.9)' }}
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2} className="w-4 h-4">
-                    <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                </button>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* Filter tabs */}
-      <div
-        className="flex gap-1 p-1 rounded-xl mb-6 w-fit"
-        style={{ backgroundColor: 'var(--bg-tertiary)' }}
-      >
-        {(['all', 'live'] as const).map(tab => (
-          <button
-            key={tab}
-            type="button"
-            onClick={() => setFilter(tab)}
-            className="px-4 py-2 rounded-lg text-sm font-medium transition-all"
-            style={{
-              backgroundColor: filter === tab ? 'var(--bg-primary)' : 'transparent',
-              color: filter === tab ? 'var(--text-primary)' : 'var(--text-secondary)',
-              boxShadow: filter === tab ? 'var(--card-shadow)' : 'none'
-            }}
-          >
-            {tab === 'all' ? 'All' : '🔴 Live Now'}
-          </button>
-        ))}
-      </div>
-
-      {/* Category filter chips */}
-      <div className="flex flex-wrap gap-2 mb-6">
-        <button
-          type="button"
-          onClick={() => setCategoryFilter('')}
-          className="px-3 py-1.5 rounded-full text-xs font-medium transition-all"
-          style={{
-            backgroundColor: categoryFilter === '' ? 'var(--accent)' : 'var(--bg-tertiary)',
-            color: categoryFilter === '' ? 'white' : 'var(--text-secondary)',
-            border: categoryFilter === '' ? 'none' : '1px solid var(--border)',
-          }}
+      {/* Filter tabs + Category chips */}
+      <div className="flex flex-wrap items-center gap-3 mb-6">
+        <div
+          className="flex gap-1 p-1 rounded-xl shrink-0"
+          style={{ backgroundColor: 'var(--bg-tertiary)' }}
         >
-          All Categories
-        </button>
-        {CATEGORIES.map(cat => (
+          {(['all', 'live'] as const).map(tab => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => setFilter(tab)}
+              className="px-4 py-2 rounded-lg text-sm font-medium transition-all"
+              style={{
+                backgroundColor: filter === tab ? 'var(--bg-primary)' : 'transparent',
+                color: filter === tab ? 'var(--text-primary)' : 'var(--text-secondary)',
+                boxShadow: filter === tab ? 'var(--card-shadow)' : 'none'
+              }}
+            >
+              {tab === 'all' ? 'All' : 'Live Now'}
+            </button>
+          ))}
+        </div>
+
+        <div
+          className="hidden sm:block w-px h-6 shrink-0"
+          style={{ backgroundColor: 'var(--border)' }}
+        />
+
+        <div className="flex flex-wrap gap-2">
           <button
-            key={cat.value}
             type="button"
-            onClick={() => setCategoryFilter(prev => prev === cat.value ? '' : cat.value)}
+            onClick={() => setCategoryFilter('')}
             className="px-3 py-1.5 rounded-full text-xs font-medium transition-all"
             style={{
-              backgroundColor: categoryFilter === cat.value ? cat.color : 'var(--bg-tertiary)',
-              color: categoryFilter === cat.value ? 'white' : 'var(--text-secondary)',
-              border: categoryFilter === cat.value ? 'none' : '1px solid var(--border)',
+              backgroundColor: categoryFilter === '' ? 'var(--accent)' : 'var(--bg-tertiary)',
+              color: categoryFilter === '' ? 'white' : 'var(--text-secondary)',
+              border: categoryFilter === '' ? 'none' : '1px solid var(--border)',
             }}
           >
-            {cat.label}
+            All
           </button>
-        ))}
+          {CATEGORIES.map(cat => (
+            <button
+              key={cat.value}
+              type="button"
+              onClick={() => setCategoryFilter(prev => prev === cat.value ? '' : cat.value)}
+              className="px-3 py-1.5 rounded-full text-xs font-medium transition-all"
+              style={{
+                backgroundColor: categoryFilter === cat.value ? cat.color : 'var(--bg-tertiary)',
+                color: categoryFilter === cat.value ? 'white' : 'var(--text-secondary)',
+                border: categoryFilter === cat.value ? 'none' : '1px solid var(--border)',
+              }}
+            >
+              {cat.label}
+            </button>
+          ))}
+        </div>
       </div>
 
+      {/* Stream grid */}
       {isLoading ? (
         <div className="flex items-center justify-center py-20">
           <div
@@ -667,56 +586,14 @@ export default function LivePage() {
           )}
         </div>
       ) : (
-        <div className="space-y-8">
-          {/* Live Now Section */}
-          {liveStreams.length > 0 && (
-            <section>
-              <h2 className="text-lg font-semibold mb-4 flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
-                <span className="relative flex h-2.5 w-2.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75" />
-                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500" />
-                </span>
-                Live Now
-              </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {liveStreams.map(stream => (
-                  <LiveStreamCard key={stream.id} stream={stream} />
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* Other streams */}
-          {filter === 'all' && otherStreams.length > 0 && (
-            <section>
-              <h2 className="text-lg font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>
-                Recent Streams
-              </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {otherStreams.map(stream => (
-                  <LiveStreamCard key={stream.id} stream={stream} />
-                ))}
-              </div>
-            </section>
-          )}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {streams.map(stream => (
+            <LiveStreamCard key={stream.id} stream={stream} />
+          ))}
         </div>
       )}
 
       <GoLiveModal isOpen={showGoLive} onClose={() => setShowGoLive(false)} />
-
-      {/* Delete Confirmation Modal */}
-      {deleteTarget && (
-        <ConfirmationModal
-          isOpen={!!deleteTarget}
-          onClose={() => setDeleteTarget(null)}
-          onConfirm={() => deleteMutation.mutate(deleteTarget.id)}
-          title="Delete this stream?"
-          description={`"${deleteTarget.title}" will be permanently removed.`}
-          confirmText="Delete"
-          isDestructive={true}
-          isLoading={deleteMutation.isPending}
-        />
-      )}
     </div>
   )
 }

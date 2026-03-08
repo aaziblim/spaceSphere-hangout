@@ -1,4 +1,5 @@
 from django.db import migrations
+import os
 
 
 def set_default_site(apps, schema_editor):
@@ -6,8 +7,8 @@ def set_default_site(apps, schema_editor):
     Site.objects.update_or_create(
         id=1,
         defaults={
-            "domain": "my-project-latest.onrender.com",
-            "name": "Spherespace",
+            "domain": os.environ.get("SITE_DOMAIN", "my-project-latest.onrender.com"),
+            "name": os.environ.get("SITE_NAME", "Spherespace"),
         },
     )
 

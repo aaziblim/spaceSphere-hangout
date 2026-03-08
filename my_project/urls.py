@@ -6,6 +6,9 @@ from users import views as user_views
 from users import api as users_api
 from django.conf import settings
 from django.conf.urls.static import static
+from django.views.static import serve
+import re
+from django.urls import re_path
 from blog import views as blog_views
 from blog.api import PostViewSet, CommentViewSet, LivestreamViewSet, CommunityViewSet, trending_posts_view, increment_post_views
 from payments import api as payments_api
@@ -85,7 +88,8 @@ urlpatterns = [
     path('accounts/', include('allauth.urls'))
 ]
 
-if settings.DEBUG:
- urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+urlpatterns += [
+    re_path(r'^media/(?P<path>.*)$', serve, {'document_root': settings.MEDIA_ROOT}),
+]
 
 

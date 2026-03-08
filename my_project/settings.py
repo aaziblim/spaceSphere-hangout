@@ -41,6 +41,9 @@ ENVIRONMENT = os.environ.get('ENVIRONMENT', 'development')
 
 ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0', 'my-project-latest.onrender.com']
 
+SITE_DOMAIN = os.environ.get('SITE_DOMAIN', 'my-project-latest.onrender.com')
+SITE_NAME = os.environ.get('SITE_NAME', 'Spherespace')
+
 
 # Application definition
 
@@ -332,12 +335,23 @@ SOCIALACCOUNT_PROVIDERS = {
             'profile',
             'email',
         ],
+        'AUTH_PARAMS': {
+            'access_type': 'online',
+        },
+        'APP': {
+            'client_id': os.environ.get('GOOGLE_CLIENT_ID', ''),
+            'secret': os.environ.get('GOOGLE_CLIENT_SECRET', ''),
+        },
     },
     'github': {
         'SCOPE': [
             'user',
             'user:email',
         ],
+        'APP': {
+            'client_id': os.environ.get('GITHUB_CLIENT_ID', ''),
+            'secret': os.environ.get('GITHUB_CLIENT_SECRET', ''),
+        },
     },
 }
 
@@ -440,8 +454,8 @@ def create_default_site():
             Site.objects.get_or_create(
                 id=settings.SITE_ID,
                 defaults={
-                    'domain': 'my-project-latest.onrender.com',
-                    'name': 'Spherespace'
+                    'domain': settings.SITE_DOMAIN,
+                    'name': settings.SITE_NAME,
                 }
             )
         except (ProgrammingError, OperationalError):

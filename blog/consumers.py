@@ -8,6 +8,17 @@ from channels.db import database_sync_to_async
 from django.db.models import F
 
 
+def _build_absolute_image_url(scope, image_url):
+    """Build an absolute URL from a relative image URL using WebSocket scope."""
+    if not image_url:
+        return None
+    if image_url.startswith(('http://', 'https://')):
+        return image_url
+    server = scope.get('server', ('localhost', 8000))
+    scheme = 'https' if server[1] == 443 else 'http'
+    return f'{scheme}://{server[0]}:{server[1]}{image_url}'
+
+
 class LivestreamConsumer(AsyncWebsocketConsumer):
     """
     WebSocket consumer for livestream interactions.
@@ -187,7 +198,7 @@ class LivestreamConsumer(AsyncWebsocketConsumer):
             'author': {
                 'id': self.user.id,
                 'username': self.user.username,
-                'profile_image': profile_image,
+                'profile_image': _build_absolute_image_url(self.scope, profile_image),
             },
             'content': msg.content,
             'created_at': msg.created_at.isoformat(),
@@ -267,5 +278,5 @@ class LivestreamConsumer(AsyncWebsocketConsumer):
         return {
             'id': user.id,
             'username': user.username,
-            'profile_image': profile_image,
+            'profile_image': _build_absolute_image_url(self.scope, profile_image),
         }

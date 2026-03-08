@@ -1,7 +1,7 @@
-import { useRef, useCallback, useEffect, useMemo, useState } from 'react'
+import { useRef, useCallback, useEffect, useMemo } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { fetchPosts, likePost, dislikePost } from '../api'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { fetchPosts, likePost, dislikePost, fetchCommunityPulse } from '../api'
 import { useAuth } from '../AuthContext'
 
 import PostCard, { getSavedPosts, getHotScore, getForYouScore } from '../components/PostCard'
@@ -9,18 +9,6 @@ import ActiveStreamsCarousel from '../components/ActiveStreamsCarousel'
 import type { Paginated, Post } from '../types'
 
 type FilterTab = 'foryou' | 'fresh' | 'hot' | 'saved'
-
-// Simulated "active viewers"
-function useActiveViewers() {
-  const [count, setCount] = useState(Math.floor(Math.random() * 50) + 10)
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCount(prev => Math.max(5, prev + Math.floor(Math.random() * 7) - 3))
-    }, 8000)
-    return () => clearInterval(interval)
-  }, [])
-  return count
-}
 
 export default function HomePage() {
   const { user } = useAuth()
@@ -41,7 +29,12 @@ export default function HomePage() {
     setSearchParams(searchParams)
   }
 
-  const activeViewers = useActiveViewers()
+  const { data: pulseData } = useQuery({
+    queryKey: ['communityPulse'],
+    queryFn: fetchCommunityPulse,
+    staleTime: 30000,
+    refetchInterval: 30000,
+  })
 
   const {
     data,
@@ -161,7 +154,7 @@ export default function HomePage() {
             </div>
             <div>
               <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>The Hangout</p>
-              <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>{activeViewers} people here now</p>
+              <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>{pulseData?.active_users ?? 0} people here now</p>
             </div>
           </div>
           {user && <Link to="/posts/new" className="px-4 py-2 rounded-full text-white text-sm font-medium transition-all hover:opacity-90" style={{ backgroundColor: 'var(--accent)' }}>Share something</Link>}
