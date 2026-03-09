@@ -8,10 +8,15 @@ Spherespace is a real-time social platform for creators and communities. It comb
 |----------|----------|
 | Social | User profiles, following, posts, comments, communities |
 | Real-time Chat | WebSocket messaging, typing indicators, read receipts, message requests |
+| Notifications | Real-time WebSocket notifications for likes, comments, follows, and replies |
+| Settings | Profile, account, appearance, notifications, privacy, security, and account deletion |
+| Auth | Email/password, Google and GitHub OAuth, email verification, password reset |
 | Gamification | Achievement badges, activity streaks, karma system |
 | Creators | Verified badges, analytics dashboard, payment integration |
 | Live Streaming | WebSocket chat, screen sharing, viewer moderation, stream categories, post-stream summary |
-| UI/UX | Dark/light themes, skeleton loading, micro-interactions |
+| Audio Spaces | Real-time spatial audio rooms with physics-based orbs and emote bursts |
+| Payments | Paystack integration, subscription tiers (Blue, Premium, Organization), webhooks |
+| UI/UX | Dark/light/system themes, skeleton loading, micro-interactions, custom 404 page |
 
 ## Screenshots
 
@@ -77,22 +82,26 @@ my_project/
 │   ├── urls.py
 │   └── asgi.py          # Channels/WebSocket routing
 ├── users/               # User management
-│   ├── models.py        # Profile, Follow, Conversation, DirectMessage, UserAchievement
-│   ├── api.py           # REST endpoints
-│   └── consumers.py     # WebSocket consumers
+│   ├── models.py        # Profile, Follow, Conversation, DirectMessage, UserAchievement, UserSettings
+│   ├── api.py           # REST endpoints (auth, profiles, settings, notifications)
+│   ├── consumers.py     # WebSocket consumers (chat, notifications, spheres)
+│   └── signals.py       # Auto-create Profile and UserSettings on registration
 ├── blog/                # Content management
 │   ├── models.py        # Post, Comment, Community, Livestream, LivestreamBan
 │   ├── api.py           # Posts, comments, communities, livestreaming API
 │   ├── consumers.py     # Livestream WebSocket consumer
 │   └── routing.py       # WebSocket URL routing
 ├── payments/            # Paystack integration
-│   └── api.py           # Payment flows
+│   └── api.py           # Payment flows, subscriptions, webhooks
 └── frontend/            # React application
     ├── src/
-    │   ├── components/  # UI components
-    │   ├── pages/       # Page components
-    │   ├── hooks/       # Custom hooks (chat WS, livestream WS)
-    │   └── api.ts       # API client
+    │   ├── components/       # UI components (Chat, Navbar, PostCard, etc.)
+    │   ├── components/settings/ # Settings page sections (profile, privacy, security, etc.)
+    │   ├── pages/            # Page components (Home, Explore, Settings, etc.)
+    │   ├── hooks/            # Custom hooks (chat WS, livestream WS, notifications WS)
+    │   ├── ThemeContext.tsx   # Theme provider (light, dark, system)
+    │   ├── AuthContext.tsx    # Auth provider
+    │   └── api.ts            # API client
     └── index.html
 ```
 
@@ -310,8 +319,24 @@ POST /api/auth/login/
 POST /api/auth/register/
 POST /api/auth/logout/
 GET  /api/auth/user/
+POST /api/auth/password/change/
+POST /api/auth/password/reset/
+POST /api/auth/password/reset/confirm/
+POST /api/auth/delete-account/
 
-# Posts & Content
+# Email Verification
+POST /api/auth/verify-email/
+POST /api/auth/resend-verification/
+
+# User Settings
+GET   /api/settings/              # Get notification, privacy, and appearance prefs
+PATCH /api/settings/              # Update settings
+
+# Notifications
+GET  /api/notifications/
+POST /api/notifications/mark-read/
+
+# Posts and Content
 GET  /api/posts/
 POST /api/posts/
 GET  /api/posts/{slug}/
@@ -338,8 +363,17 @@ GET  /api/streams/{id}/messages/ # Chat history
 POST /api/streams/{id}/like/
 POST /api/streams/{id}/ban_user/ # Host moderation
 
-# Livestream WebSocket
-WS   /ws/livestream/{id}/       # Real-time chat, likes, viewer tracking
+# Payments
+POST /api/payments/initialize/
+GET  /api/payments/verify/{ref}/
+GET  /api/payments/subscription/
+POST /api/payments/cancel/
+
+# WebSocket Endpoints
+WS   /ws/chat/                   # Real-time messaging, typing, read receipts
+WS   /ws/notifications/          # Real-time notification delivery
+WS   /ws/livestream/{id}/        # Stream chat, likes, viewer tracking
+WS   /ws/spheres/{room}/         # Audio spaces
 ```
 
 ## Environment Variables
@@ -350,6 +384,9 @@ Create a `.env` file in the project root:
 # Django
 DJANGO_SECRET_KEY=your-secret-key
 DJANGO_DEBUG=True
+DJANGO_ENV=development
+SITE_NAME=Spherespace
+SITE_DOMAIN=your-domain.com
 
 # Database (optional, defaults to SQLite)
 DATABASE_URL=postgres://user:pass@localhost:5432/spherespace
@@ -362,19 +399,24 @@ AWS_ACCESS_KEY_ID=
 AWS_SECRET_ACCESS_KEY=
 AWS_STORAGE_BUCKET_NAME=
 
+# OAuth
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GITHUB_CLIENT_ID=
+GITHUB_CLIENT_SECRET=
+
 # Payments
 PAYSTACK_SECRET_KEY=sk_test_xxx
 PAYSTACK_PUBLIC_KEY=pk_test_xxx
-PAYSTACK_VERIFY=True
-PAYSTACK_WEBHOOK_VERIFY=True
+
+# Email (Gmail SMTP with App Password)
+EMAIL_HOST_USER=your@gmail.com
+EMAIL_HOST_PASSWORD=your-app-password
+DEFAULT_FROM_EMAIL=your@gmail.com
 
 # Admin access
 ADMIN_IP_RESTRICT=True
-ADMIN_ALLOWED_IPS=127.0.0.1,::1,100.90.107.100
-
-# Email
-EMAIL_HOST_USER=your@email.com
-EMAIL_HOST_PASSWORD=app-password
+ADMIN_ALLOWED_IPS=127.0.0.1,::1
 ```
 
 ---
@@ -419,18 +461,33 @@ CHANNEL_LAYERS = {
 
 ## UI Features
 
+### Settings Page
+A comprehensive, standalone settings page with sidebar navigation (desktop) and tab bar (mobile):
+- **Profile** — Avatar upload, display name, bio
+- **Account** — Email management, verification status
+- **Appearance** — Light, dark, and system theme picker
+- **Notifications** — Per-type toggles (likes, comments, follows, replies) and email notifications
+- **Privacy** — Profile visibility, online status, messaging permissions
+- **Security** — Inline password change
+- **Danger Zone** — Account deletion with password confirmation
+
+### Chat Drawer
+- Slide-in drawer with animated open/close transitions
+- Message requests for non-followers
+- Graceful handling of legacy encrypted messages
+
 ### Micro-interactions
 - **Like button**: Heartbeat animation on click
 - **Save button**: Pop bounce animation
 - **Emoji reactions**: Colored tint + label display
 
 ### Skeleton Loading
-Shimmer loading states across all pages for premium feel.
+Shimmer loading states across all pages for a polished experience.
 
 ### Theme Support
 - Dark mode
 - Light mode
-- System preference detection
+- System preference detection (with live media query listener)
 
 ### Live Streaming
 - Real-time WebSocket chat (replaces REST polling) with auto-reconnect
@@ -442,11 +499,7 @@ Shimmer loading states across all pages for premium feel.
 - Premium transparent overlays for stream controls
 - Confirmation dialogs for critical actions (end stream, delete)
 
-## License
-
-See [LICENSE](LICENSE).
-
-## 🛣️ Roadmap
+## Roadmap
 
 - [ ] Push notifications
 - [ ] Voice/video calling
@@ -457,11 +510,11 @@ See [LICENSE](LICENSE).
 
 ---
 
-## 🔄 CI/CD & DevOps
+## CI/CD and DevOps
 
 This project uses **GitHub Actions** for robust automated testing and deployment.
 
-### 🛠️ Workflows
+### Workflows
 | Workflow | Trigger | Description |
 |----------|---------|-------------|
 | **CI Pipeline** | `push`, `pull_request` | Runs backend tests (pytest), frontend tests, lints, and builds Docker images. |
@@ -469,7 +522,7 @@ This project uses **GitHub Actions** for robust automated testing and deployment
 | **Release** | `tag` (v*) | Automatically builds production Docker images, pushes to DockerHub, and creates a GitHub Release. |
 | **Dependabot** | `daily` | Automatically checks and creates PRs for outdated pip and npm dependencies. |
 
-### 🐳 Docker Architecture
+### Docker Architecture
 * **Multi-stage builds** for optimized image sizes (Backend < 200MB).
 * **Non-root users** for security.
 * **Health checks** enabled for all services.
@@ -477,7 +530,7 @@ This project uses **GitHub Actions** for robust automated testing and deployment
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 1. Fork the repo
 2. Create a feature branch: `git checkout -b feature/amazing-feature`
@@ -487,13 +540,13 @@ This project uses **GitHub Actions** for robust automated testing and deployment
 
 ---
 
-## 📄 License
+## License
 
 This project is licensed under the MIT License.
 
 ---
 
-## 📚 Additional Docs
+## Additional Documentation
 
 See the `docs/` folder for:
 - `architecture.svg` — System architecture diagram
