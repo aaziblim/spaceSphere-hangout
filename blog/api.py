@@ -237,6 +237,8 @@ class PostViewSet(viewsets.ModelViewSet):
         else:
             post.dislikes.remove(user)
             post.likes.add(user)
+            from users.api import create_notification
+            create_notification(post.author, user, 'like', post_slug=post.slug, post_title=post.title)
 
         refreshed = self._annotated_instance(post)
         serializer = self.get_serializer(refreshed)
@@ -538,7 +540,21 @@ class CommentViewSet(viewsets.ModelViewSet):
         return queryset.order_by("-created_at")
 
     def perform_create(self, serializer):
-        serializer.save(author=self.request.user)
+        comment = serializer.save(author=self.request.user)
+        from users.api import create_notification
+        post = comment.post
+        if comment.parent:
+            # Reply to another comment — notify the parent comment's author
+            create_notification(
+                comment.parent.author, self.request.user, 'reply',
+                post_slug=post.slug, post_title=post.title, comment_id=comment.parent.id,
+            )
+        else:
+            # Top-level comment — notify the post author
+            create_notification(
+                post.author, self.request.user, 'comment',
+                post_slug=post.slug, post_title=post.title,
+            )
 
     def _annotated_instance(self, comment):
         return (

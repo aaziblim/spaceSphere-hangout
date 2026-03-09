@@ -5,6 +5,7 @@ import { LeftSidebar, RightSidebar } from './Sidebars'
 import MobileMenuSheet from './MobileMenuSheet'
 import { ChatDrawer, useChatUnread } from './Chat'
 import { useAuth } from '../AuthContext'
+import EmailVerificationBanner from './EmailVerificationBanner'
 
 export default function MainLayout() {
   return (
@@ -17,6 +18,7 @@ export default function MainLayout() {
 
           {/* Main Content */}
           <main className="flex-1 min-w-0">
+            <EmailVerificationBanner />
             <Outlet />
           </main>
 

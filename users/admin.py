@@ -3,7 +3,7 @@ from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import User
 from .models import (
     Profile, Follow, Conversation, DirectMessage,
-    UserActivity, UserPublicKey, UserAchievement,
+    UserActivity, UserPublicKey, UserAchievement, UserSettings,
 )
 
 
@@ -128,3 +128,9 @@ class UserAchievementAdmin(admin.ModelAdmin):
     list_filter = ('achievement_id', 'shown_to_user')
     search_fields = ('user__username',)
     readonly_fields = ('earned_at',)
+
+
+@admin.register(UserSettings)
+class UserSettingsAdmin(admin.ModelAdmin):
+    list_display = ('user', 'profile_visibility', 'show_online_status', 'email_notifications')
+    list_filter = ('profile_visibility', 'email_notifications')

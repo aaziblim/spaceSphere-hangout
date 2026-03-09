@@ -9,11 +9,12 @@ export default function RegisterPage() {
   const [password2, setPassword2] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [registered, setRegistered] = useState(false)
 
   const { register, user } = useAuth()
   const navigate = useNavigate()
 
-  if (user) {
+  if (user && !registered) {
     navigate('/')
     return null
   }
@@ -32,12 +33,38 @@ export default function RegisterPage() {
     setLoading(true)
     try {
       await register(username, email, password)
-      navigate('/')
+      setRegistered(true)
     } catch {
       setError('Registration failed. Username may already be taken.')
     } finally {
       setLoading(false)
     }
+  }
+
+  if (registered) {
+    return (
+      <div className="min-h-[80vh] flex items-center justify-center px-4 py-8">
+        <div className="w-full max-w-sm text-center">
+          <div className="w-16 h-16 mx-auto mb-6 rounded-full flex items-center justify-center" style={{ backgroundColor: 'var(--accent-alpha)', color: 'var(--accent)' }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-8 h-8">
+              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+              <polyline points="22,6 12,13 2,6" />
+            </svg>
+          </div>
+          <h1 className="text-2xl font-bold mb-2" style={{ color: 'var(--text-primary)' }}>Check your email</h1>
+          <p className="mb-6" style={{ color: 'var(--text-secondary)' }}>
+            We sent a verification link to <strong>{email}</strong>. Click the link to activate your account.
+          </p>
+          <Link
+            to="/"
+            className="inline-block px-6 py-3 rounded-full text-white text-sm font-medium transition-all hover:opacity-90"
+            style={{ backgroundColor: 'var(--accent)' }}
+          >
+            Continue to Spherespace
+          </Link>
+        </div>
+      </div>
+    )
   }
 
   return (

@@ -208,7 +208,7 @@ export function useE2EE(): UseE2EEResult {
         }
 
         // Decryption failed, show error
-        return '[🔒 Unable to decrypt message]'
+        return 'This message can\u2019t be decrypted on this device.'
     }, [decryptFromSender])
 
     return {

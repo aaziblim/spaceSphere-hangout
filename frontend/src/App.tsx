@@ -1,11 +1,10 @@
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, Navigate } from 'react-router-dom'
 import MainLayout from './components/MainLayout'
 import HomePage from './pages/HomePage'
 import PostDetailPage from './pages/PostDetailPage'
 import PostFormPage from './pages/PostFormPage'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
-import ProfilePage from './pages/ProfilePage'
 import UserProfilePage from './pages/UserProfilePage'
 import ExplorePage from './pages/ExplorePage'
 import LivePage from './pages/LivePage'
@@ -17,6 +16,11 @@ import ExploreCommunitiesPage from './pages/ExploreCommunitiesPage'
 import CreateCommunityPage from './pages/CreateCommunityPage'
 import StreamViewerPage from './pages/StreamViewerPage'
 import SpheresPage from './pages/SpheresPage'
+import NotFoundPage from './pages/NotFoundPage'
+import SettingsPage from './pages/SettingsPage'
+import VerifyEmailPage from './pages/VerifyEmailPage'
+import ForgotPasswordPage from './pages/ForgotPasswordPage'
+import ResetPasswordConfirmPage from './pages/ResetPasswordConfirmPage'
 
 function App() {
   return (
@@ -28,7 +32,8 @@ function App() {
         <Route path="/posts/:slug/edit" element={<PostFormPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
-        <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/profile" element={<Navigate to="/settings#profile" replace />} />
+        <Route path="/settings" element={<SettingsPage />} />
         <Route path="/user/:username" element={<UserProfilePage />} />
         <Route path="/explore" element={<ExplorePage />} />
         <Route path="/live" element={<LivePage />} />
@@ -39,6 +44,11 @@ function App() {
         <Route path="/c/:slug" element={<CommunityPage />} />
         <Route path="/communities/discover" element={<ExploreCommunitiesPage />} />
         <Route path="/communities/new" element={<CreateCommunityPage />} />
+        <Route path="/reset-password" element={<Navigate to="/settings#security" replace />} />
+        <Route path="/verify-email/:token" element={<VerifyEmailPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/forgot-password/:uid/:token" element={<ResetPasswordConfirmPage />} />
+        <Route path="*" element={<NotFoundPage />} />
       </Route>
       {/* Spheres (Nebula) Route - Outside MainLayout for Fullscreen Immersion */}
       <Route path="/spheres/:slug" element={<SpheresPage />} />

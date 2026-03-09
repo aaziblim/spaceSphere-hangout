@@ -365,12 +365,14 @@ CRISPY_ALLOWED_TEMPLATE_PACKS = "tailwind" # ✅ If using Tailwind CSS and Boots
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:5173',
     'http://127.0.0.1:5173',
+    f'https://{SITE_DOMAIN}',
 ]
 CORS_ALLOW_CREDENTIALS = True
 
 CSRF_TRUSTED_ORIGINS = [
     'http://localhost:5173',
     'http://127.0.0.1:5173',
+    f'https://{SITE_DOMAIN}',
 ]
 
 # Cookie settings for cross-origin requests
@@ -426,6 +428,9 @@ EMAIL_USE_TLS = True
 EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
 DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'noreply@myproject.com')
+
+# Password reset token expiry (24 hours)
+PASSWORD_RESET_TIMEOUT = 86400
 
 # Paystack Configuration
 PAYSTACK_SECRET_KEY = os.environ.get('PAYSTACK_SECRET_KEY', 'sk_test_xxxxxxxxxxxxxxxxxxxxx')

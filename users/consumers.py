@@ -379,3 +379,40 @@ class SpheresConsumer(AsyncWebsocketConsumer):
             'user_id': event['user_id'],
             'emote': event['emote']
         }))
+
+
+class NotificationConsumer(AsyncWebsocketConsumer):
+    """
+    WebSocket consumer for real-time notification delivery.
+    Each authenticated user joins a personal group to receive notifications.
+    """
+
+    async def connect(self):
+        self.user = self.scope['user']
+        if not self.user.is_authenticated:
+            await self.close()
+            return
+
+        self.group_name = f'notifications_{self.user.id}'
+        await self.channel_layer.group_add(self.group_name, self.channel_name)
+        await self.accept()
+
+    async def disconnect(self, close_code):
+        if hasattr(self, 'group_name'):
+            await self.channel_layer.group_discard(self.group_name, self.channel_name)
+
+    async def receive(self, text_data=None, bytes_data=None):
+        # Client can send ping for keep-alive
+        try:
+            data = json.loads(text_data)
+            if data.get('type') == 'ping':
+                await self.send(text_data=json.dumps({'type': 'pong'}))
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    async def send_notification(self, event):
+        """Called by channel layer when a notification is created."""
+        await self.send(text_data=json.dumps({
+            'type': 'notification',
+            'notification': event['notification'],
+        }))

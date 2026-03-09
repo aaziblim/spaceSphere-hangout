@@ -6,7 +6,7 @@ from rest_framework.decorators import api_view, permission_classes, throttle_cla
 from rest_framework.response import Response
 from rest_framework import serializers
 from rest_framework.throttling import ScopedRateThrottle
-from users.models import Profile, Follow, UserPublicKey
+from users.models import Profile, Follow, UserPublicKey, UserSettings
 from django.db.models import Count, Q
 from drf_spectacular.utils import (
     extend_schema,
@@ -33,7 +33,7 @@ class ProfileSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Profile
-        fields = ['image', 'bio']
+        fields = ['image', 'bio', 'email_verified']
 
     def get_image(self, obj) -> Optional[str]:
         if not obj.image:
@@ -255,6 +255,10 @@ def register_view(request):
         user = serializer.save()
         login(request, user, backend='django.contrib.auth.backends.ModelBackend')
         logger.info('New user registered: username=%s', user.username)
+        try:
+            send_verification_email(user)
+        except Exception:
+            logger.exception('Failed to send verification email for user=%s', user.username)
         return Response(UserSerializer(user, context={'request': request}).data, status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -364,6 +368,7 @@ def follow_user_view(request, username):
     )
     
     if created:
+        create_notification(user_to_follow, request.user, 'follow')
         return Response({
             'detail': f'Now following {username}.',
             'is_following': True,
@@ -1331,3 +1336,290 @@ def all_achievements_view(request):
         })
     
     return Response({'achievements': data})
+
+
+# ============ NOTIFICATIONS API ============
+
+from users.models import Notification
+
+
+def _serialize_notification(n):
+    """Serialize a Notification instance to a dict."""
+    return {
+        'id': n.id,
+        'type': n.notification_type,
+        'actor': {
+            'id': n.actor.id,
+            'username': n.actor.username,
+            'profile_image': n.actor.profile.image.url if n.actor.profile.image else None,
+        },
+        'post_slug': n.post_slug or None,
+        'post_title': n.post_title or None,
+        'comment_id': n.comment_id,
+        'is_read': n.is_read,
+        'created_at': n.created_at.isoformat(),
+    }
+
+
+def create_notification(recipient, actor, notification_type, post_slug='', post_title='', comment_id=None):
+    """
+    Create a notification and broadcast it via WebSocket.
+    Does nothing if actor == recipient (no self-notifications).
+    """
+    if recipient.id == actor.id:
+        return None
+
+    notification = Notification.objects.create(
+        recipient=recipient,
+        actor=actor,
+        notification_type=notification_type,
+        post_slug=post_slug,
+        post_title=post_title,
+        comment_id=comment_id,
+    )
+
+    # Broadcast via channel layer (fire-and-forget from sync context)
+    try:
+        from channels.layers import get_channel_layer
+        from asgiref.sync import async_to_sync
+        channel_layer = get_channel_layer()
+        if channel_layer:
+            async_to_sync(channel_layer.group_send)(
+                f'notifications_{recipient.id}',
+                {
+                    'type': 'send_notification',
+                    'notification': _serialize_notification(notification),
+                }
+            )
+    except Exception:
+        pass  # WebSocket delivery is best-effort
+
+    return notification
+
+
+@extend_schema(
+    responses=inline_serializer(
+        name='NotificationsListResponse',
+        fields={
+            'notifications': serializers.ListField(),
+            'unread_count': serializers.IntegerField(),
+        },
+    )
+)
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def notifications_list_view(request):
+    """Get the current user's notifications (latest 50)."""
+    notifications = (
+        Notification.objects
+        .filter(recipient=request.user)
+        .select_related('actor', 'actor__profile')
+        [:50]
+    )
+    unread_count = Notification.objects.filter(recipient=request.user, is_read=False).count()
+    return Response({
+        'notifications': [_serialize_notification(n) for n in notifications],
+        'unread_count': unread_count,
+    })
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def notifications_unread_count_view(request):
+    """Get unread notification count."""
+    count = Notification.objects.filter(recipient=request.user, is_read=False).count()
+    return Response({'unread_count': count})
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def notifications_mark_read_view(request):
+    """Mark notifications as read. Pass notification_ids or omit to mark all."""
+    ids = request.data.get('notification_ids')
+    qs = Notification.objects.filter(recipient=request.user, is_read=False)
+    if ids:
+        qs = qs.filter(id__in=ids)
+    updated = qs.update(is_read=True)
+    return Response({'marked_read': updated})
+
+
+# ============ EMAIL VERIFICATION & PASSWORD RESET ============
+
+from django.contrib.auth.tokens import default_token_generator
+from django.utils.http import urlsafe_base64_decode
+from django.utils.encoding import force_str
+from users.tokens import verify_email_token
+from users.emails import send_verification_email, send_password_reset_email
+
+
+@extend_schema(
+    request=inline_serializer(
+        name='VerifyEmailRequest',
+        fields={'token': serializers.CharField()},
+    ),
+)
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def verify_email_view(request):
+    """Verify a user's email address using a signed token."""
+    token = request.data.get('token')
+    if not token:
+        return Response({'detail': 'Token is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        user_pk, email = verify_email_token(token)
+    except Exception:
+        return Response({'detail': 'Invalid or expired verification link.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        user = User.objects.get(pk=user_pk)
+    except User.DoesNotExist:
+        return Response({'detail': 'Invalid verification link.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if user.email != email:
+        return Response({'detail': 'This verification link is no longer valid.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if user.profile.email_verified:
+        return Response({'detail': 'Email is already verified.'})
+
+    user.profile.email_verified = True
+    user.profile.save(update_fields=['email_verified'])
+    logger.info('Email verified for user=%s', user.username)
+    return Response({'detail': 'Email verified successfully.'})
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+@throttle_classes([ScopedRateThrottle])
+def resend_verification_view(request):
+    """Resend the email verification link."""
+    request.throttle_scope = 'register'
+    if request.user.profile.email_verified:
+        return Response({'detail': 'Email is already verified.'})
+    try:
+        send_verification_email(request.user)
+    except Exception:
+        logger.exception('Failed to resend verification email for user=%s', request.user.username)
+        return Response({'detail': 'Failed to send email. Please try again later.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    return Response({'detail': 'Verification email sent.'})
+
+
+@extend_schema(
+    request=inline_serializer(
+        name='PasswordResetRequest',
+        fields={'email': serializers.EmailField()},
+    ),
+)
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+@throttle_classes([ScopedRateThrottle])
+def password_reset_request_view(request):
+    """Request a password reset email."""
+    request.throttle_scope = 'password_change'
+    email = request.data.get('email', '').strip().lower()
+    if not email:
+        return Response({'detail': 'Email is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Always return 200 regardless of whether user exists (prevent email enumeration)
+    try:
+        user = User.objects.get(email__iexact=email)
+        send_password_reset_email(user)
+    except User.DoesNotExist:
+        pass
+    except Exception:
+        logger.exception('Failed to send password reset email for email=%s', email)
+
+    return Response({'detail': 'If an account with that email exists, a reset link has been sent.'})
+
+
+@extend_schema(
+    request=inline_serializer(
+        name='PasswordResetConfirmRequest',
+        fields={
+            'uid': serializers.CharField(),
+            'token': serializers.CharField(),
+            'new_password': serializers.CharField(),
+        },
+    ),
+)
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def password_reset_confirm_view(request):
+    """Reset password using uid and token from the reset email."""
+    uid = request.data.get('uid')
+    token = request.data.get('token')
+    new_password = request.data.get('new_password')
+
+    if not uid or not token or not new_password:
+        return Response({'detail': 'uid, token, and new_password are required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        user_pk = force_str(urlsafe_base64_decode(uid))
+        user = User.objects.get(pk=user_pk)
+    except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+        return Response({'detail': 'Invalid reset link.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if not default_token_generator.check_token(user, token):
+        return Response({'detail': 'Reset link has expired or is invalid.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        validate_password(new_password, user=user)
+    except Exception as e:
+        return Response({'detail': list(e.messages)}, status=status.HTTP_400_BAD_REQUEST)
+
+    user.set_password(new_password)
+    user.save()
+    logger.info('Password reset completed for user=%s', user.username)
+    return Response({'detail': 'Password has been reset successfully. You can now log in.'})
+
+
+# ============ USER SETTINGS ============
+
+class UserSettingsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserSettings
+        fields = [
+            'notify_likes', 'notify_comments', 'notify_follows', 'notify_replies',
+            'email_notifications', 'profile_visibility', 'show_online_status',
+            'who_can_message',
+        ]
+
+
+@api_view(['GET', 'PATCH'])
+@permission_classes([permissions.IsAuthenticated])
+def user_settings_view(request):
+    """Get or update the current user's notification and privacy settings."""
+    settings_obj, _ = UserSettings.objects.get_or_create(user=request.user)
+
+    if request.method == 'GET':
+        serializer = UserSettingsSerializer(settings_obj)
+        return Response(serializer.data)
+
+    serializer = UserSettingsSerializer(settings_obj, data=request.data, partial=True)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def delete_account_view(request):
+    """Permanently delete the current user's account."""
+    password = request.data.get('password')
+    if not password:
+        return Response(
+            {'detail': 'Password is required to confirm account deletion.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    if not request.user.check_password(password):
+        return Response(
+            {'detail': 'Incorrect password.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    username = request.user.username
+    logout(request)
+    request.user.delete()
+    logger.info('Account deleted: username=%s', username)
+    return Response({'detail': 'Account deleted successfully.'})

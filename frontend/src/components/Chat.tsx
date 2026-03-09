@@ -7,7 +7,6 @@ import {
   startConversation,
   fetchMessages,
   sendMessage as sendMessageApi,
-  sendEncryptedMessage,
   conversationAction,
   fetchMessageRequests,
   fetchUnreadCount
@@ -62,6 +61,8 @@ export function ChatDrawer({ isOpen, onClose, initialConversation }: ChatDrawerP
   const [activeConversation, setActiveConversation] = useState<Conversation | null>(initialConversation || null)
   const [view, setView] = useState<'list' | 'chat' | 'requests'>(initialConversation ? 'chat' : 'list')
   const [newMessage, setNewMessage] = useState('')
+  const [closing, setClosing] = useState(false)
+  const [mounted, setMounted] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -69,12 +70,12 @@ export function ChatDrawer({ isOpen, onClose, initialConversation }: ChatDrawerP
   // WebSocket connection for real-time messaging
   const { status: wsStatus, sendMessage: wsSendMessage, sendTyping, markAsRead, typingStatus } = useChatWebSocket()
 
-  // E2EE encryption hook
-  const { isEnabled: e2eeEnabled, encryptForRecipient, processMessageForDisplay } = useE2EE()
+  // E2EE hook (decryption only — encryption disabled due to key-sync limitations)
+  const { isInitialized: e2eeReady, isEnabled: e2eeEnabled, processMessageForDisplay } = useE2EE()
 
   // Track decrypted message content (Maps message ID to decrypted text)
   const [decryptedMessages, setDecryptedMessages] = useState<Record<string, string>>({})
-
+  const decryptAttempted = useRef<Set<string>>(new Set())
   // Fetch conversations
   const { data: conversations = [], isLoading: loadingConversations } = useQuery({
     queryKey: ['conversations'],
@@ -126,6 +127,15 @@ export function ChatDrawer({ isOpen, onClose, initialConversation }: ChatDrawerP
     }
   }, [initialConversation, isOpen])
 
+  // Trigger enter animation
+  useEffect(() => {
+    if (isOpen) {
+      requestAnimationFrame(() => setMounted(true))
+    } else {
+      setMounted(false)
+    }
+  }, [isOpen])
+
   // Mark messages as read when viewing conversation
   useEffect(() => {
     if (activeConversation && view === 'chat' && wsStatus === 'connected') {
@@ -171,6 +181,15 @@ export function ChatDrawer({ isOpen, onClose, initialConversation }: ChatDrawerP
     setNewMessage('')
   }, [])
 
+  // Animated close
+  const handleClose = useCallback(() => {
+    setClosing(true)
+    setTimeout(() => {
+      setClosing(false)
+      onClose()
+    }, 250)
+  }, [onClose])
+
   const getOtherParticipant = useCallback((convo: Conversation): ChatParticipant | undefined => {
     return convo.participants.find(p => p.username !== user?.username)
   }, [user?.username])
@@ -179,7 +198,6 @@ export function ChatDrawer({ isOpen, onClose, initialConversation }: ChatDrawerP
     if (!newMessage.trim() || !activeConversation || sendMutation.isPending) return
 
     const content = newMessage.trim()
-    const otherUser = getOtherParticipant(activeConversation)
 
     // Clear input immediately for responsiveness
     setNewMessage('')
@@ -187,38 +205,19 @@ export function ChatDrawer({ isOpen, onClose, initialConversation }: ChatDrawerP
       inputRef.current.style.height = 'auto'
     }
 
-    // Try to encrypt the message if E2EE is enabled
-    let finalContent = content
-    let isEncrypted = false
-
-    if (e2eeEnabled && otherUser) {
-      const encrypted = await encryptForRecipient(otherUser.username, content)
-      if (encrypted) {
-        finalContent = encrypted
-        isEncrypted = true
-      }
-    }
+    // Send as plaintext — E2EE disabled due to key-sync limitations
+    // (IndexedDB-only keys with no backup make messages unreadable across devices/sessions)
 
     // Try WebSocket first, fallback to API
     if (wsStatus === 'connected') {
-      // For encrypted messages via WebSocket, we need to use REST API
-      // since WebSocket doesn't support is_encrypted flag yet
-      if (isEncrypted) {
-        sendEncryptedMessage(activeConversation.id, finalContent)
-      } else {
-        wsSendMessage(activeConversation.id, finalContent)
-      }
+      wsSendMessage(activeConversation.id, content)
       // Stop typing indicator
       sendTyping(activeConversation.id, false)
     } else {
       // Fallback to REST API
-      if (isEncrypted) {
-        sendEncryptedMessage(activeConversation.id, finalContent)
-      } else {
-        sendMutation.mutate(content)
-      }
+      sendMutation.mutate(content)
     }
-  }, [newMessage, activeConversation, sendMutation, wsStatus, wsSendMessage, sendTyping, e2eeEnabled, encryptForRecipient, getOtherParticipant])
+  }, [newMessage, activeConversation, sendMutation, wsStatus, wsSendMessage, sendTyping])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -237,45 +236,63 @@ export function ChatDrawer({ isOpen, onClose, initialConversation }: ChatDrawerP
 
   const requestCount = messageRequests.length
 
-  // Decrypt messages when they load
+  // Clear attempt cache when E2EE state changes so messages get retried
   useEffect(() => {
+    if (e2eeReady && e2eeEnabled) {
+      decryptAttempted.current.clear()
+    }
+  }, [e2eeReady, e2eeEnabled])
+
+  // Decrypt messages when they load (only after E2EE is initialized)
+  useEffect(() => {
+    if (!e2eeReady || messages.length === 0) return
     const decryptAll = async () => {
       for (const msg of messages) {
-        if (msg.is_encrypted && !decryptedMessages[msg.id]) {
+        if (msg.is_encrypted && !decryptedMessages[msg.id] && !decryptAttempted.current.has(msg.id)) {
+          decryptAttempted.current.add(msg.id)
           const senderUsername = msg.sender.username
           const decrypted = await processMessageForDisplay(msg, senderUsername)
           setDecryptedMessages(prev => ({ ...prev, [msg.id]: decrypted }))
         }
       }
     }
-    if (messages.length > 0) {
-      decryptAll()
-    }
-  }, [messages, decryptedMessages, processMessageForDisplay])
+    decryptAll()
+  }, [messages, e2eeReady, decryptedMessages, processMessageForDisplay])
 
   // Helper to get display content for a message
   const getMessageContent = (msg: Message): string => {
     if (msg.is_unsent) return '[Message unsent]'
     if (msg.is_encrypted) {
-      return decryptedMessages[msg.id] || '🔒 Decrypting...'
+      return decryptedMessages[msg.id] || 'Decrypting\u2026'
     }
     return msg.content
   }
 
-  if (!isOpen) return null
+  const isDecryptFailed = (msg: Message): boolean => {
+    if (!msg.is_encrypted) return false
+    const content = decryptedMessages[msg.id]
+    return content === 'This message can\u2019t be decrypted on this device.'
+  }
+
+  if (!isOpen && !closing) return null
 
   return (
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 z-[60] bg-black/30 backdrop-blur-sm animate-fadeIn"
-        onClick={onClose}
+        className="fixed inset-0 z-[60] bg-black/30 backdrop-blur-sm transition-opacity duration-250"
+        style={{ opacity: mounted && !closing ? 1 : 0 }}
+        onClick={handleClose}
       />
 
       {/* Drawer */}
       <div
-        className="fixed right-0 top-0 bottom-0 h-full z-[70] w-full max-w-md flex flex-col animate-slideInFromRight shadow-2xl border-l"
-        style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border)' }}
+        className="fixed right-0 top-0 bottom-0 h-full z-[70] w-full max-w-md flex flex-col shadow-2xl border-l transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]"
+        style={{
+          backgroundColor: 'var(--bg-primary)',
+          borderColor: 'var(--border)',
+          transform: mounted && !closing ? 'translateX(0)' : 'translateX(100%)',
+        }}
       >
         {/* Header */}
         <div
@@ -375,7 +392,7 @@ export function ChatDrawer({ isOpen, onClose, initialConversation }: ChatDrawerP
                   </button>
                 )}
                 <button
-                  onClick={onClose}
+                  onClick={handleClose}
                   className="p-2 rounded-full transition-colors hover:bg-[var(--bg-tertiary)]"
                   style={{ color: 'var(--text-secondary)' }}
                 >
@@ -600,9 +617,17 @@ export function ChatDrawer({ isOpen, onClose, initialConversation }: ChatDrawerP
                               color: isOwn ? 'white' : 'var(--text-primary)'
                             }}
                           >
-                            {getMessageContent(msg)}
-                            {msg.is_encrypted && (
-                              <span title="End-to-end encrypted" className="ml-1 opacity-60">🔒</span>
+                            {isDecryptFailed(msg) ? (
+                              <span className="italic text-[13px] opacity-60">
+                                {getMessageContent(msg)}
+                              </span>
+                            ) : msg.is_unsent ? (
+                              <span className="italic opacity-50">{getMessageContent(msg)}</span>
+                            ) : (
+                              getMessageContent(msg)
+                            )}
+                            {msg.is_encrypted && !isDecryptFailed(msg) && (
+                              <span title="End-to-end encrypted" className="ml-1 opacity-50 text-[12px]">🔒</span>
                             )}
                           </div>
                           {showTime && (

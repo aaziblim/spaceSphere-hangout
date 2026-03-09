@@ -27,6 +27,7 @@ class Profile(models.Model):
     image = models.ImageField(default='default.png', upload_to='profile_pics')
     bio = models.TextField(blank=True, default='')
     last_seen = models.DateTimeField(auto_now=True)
+    email_verified = models.BooleanField(default=False)
 
     def __str__(self):
         return f'{self.user.username} Profile'
@@ -214,5 +215,83 @@ class UserAchievement(models.Model):
     
     def __str__(self):
         return f"{self.user.username} - {self.achievement_id}"
+
+
+# ============ NOTIFICATIONS ============
+
+class Notification(models.Model):
+    """
+    User notifications for social activity.
+
+    Supports: likes, comments, follows, and comment replies.
+    Delivered in real-time via WebSocket and persisted for later retrieval.
+    """
+    NOTIFICATION_TYPES = [
+        ('like', 'Like'),
+        ('comment', 'Comment'),
+        ('follow', 'Follow'),
+        ('reply', 'Reply'),
+    ]
+
+    recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
+    actor = models.ForeignKey(User, on_delete=models.CASCADE, related_name='actions')
+    notification_type = models.CharField(max_length=20, choices=NOTIFICATION_TYPES)
+    # Optional references to the related object
+    post_slug = models.CharField(max_length=300, blank=True, default='')
+    post_title = models.CharField(max_length=300, blank=True, default='')
+    comment_id = models.IntegerField(null=True, blank=True)
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['recipient', '-created_at']),
+            models.Index(fields=['recipient', 'is_read']),
+        ]
+
+    def __str__(self):
+        return f"{self.actor.username} -> {self.recipient.username}: {self.notification_type}"
+
+
+# ============ USER SETTINGS ============
+
+class UserSettings(models.Model):
+    """Per-user preferences for notifications, privacy, etc."""
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='settings')
+
+    # Notification preferences
+    notify_likes = models.BooleanField(default=True)
+    notify_comments = models.BooleanField(default=True)
+    notify_follows = models.BooleanField(default=True)
+    notify_replies = models.BooleanField(default=True)
+    email_notifications = models.BooleanField(default=False)
+
+    # Privacy
+    VISIBILITY_CHOICES = [
+        ('public', 'Public'),
+        ('followers', 'Followers Only'),
+        ('private', 'Private'),
+    ]
+    profile_visibility = models.CharField(
+        max_length=20, choices=VISIBILITY_CHOICES, default='public'
+    )
+    show_online_status = models.BooleanField(default=True)
+
+    WHO_CAN_MESSAGE_CHOICES = [
+        ('everyone', 'Everyone'),
+        ('followers', 'Followers'),
+        ('nobody', 'Nobody'),
+    ]
+    who_can_message = models.CharField(
+        max_length=20, choices=WHO_CAN_MESSAGE_CHOICES, default='everyone'
+    )
+
+    class Meta:
+        verbose_name = "User Settings"
+        verbose_name_plural = "User Settings"
+
+    def __str__(self):
+        return f"{self.user.username}'s settings"
 
 

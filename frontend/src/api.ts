@@ -116,11 +116,46 @@ export async function register(username: string, email: string, password: string
   return data
 }
 
+// Email Verification
+export async function verifyEmail(token: string): Promise<{ detail: string }> {
+  const { data } = await api.post<{ detail: string }>('/auth/verify-email/', { token })
+  return data
+}
+
+export async function resendVerificationEmail(): Promise<{ detail: string }> {
+  const { data } = await api.post<{ detail: string }>('/auth/verify-email/resend/')
+  return data
+}
+
+// Password Reset
+export async function requestPasswordReset(email: string): Promise<{ detail: string }> {
+  const { data } = await api.post<{ detail: string }>('/auth/password/reset/', { email })
+  return data
+}
+
+export async function confirmPasswordReset(
+  uid: string, token: string, new_password: string
+): Promise<{ detail: string }> {
+  const { data } = await api.post<{ detail: string }>('/auth/password/reset/confirm/', {
+    uid, token, new_password
+  })
+  return data
+}
+
 // Profile
-export async function updateProfile(profileData: { bio?: string; image?: File }): Promise<User> {
+export async function updateProfile(profileData: {
+  bio?: string
+  image?: File
+  first_name?: string
+  last_name?: string
+  email?: string
+}): Promise<User> {
   const formData = new FormData()
   if (profileData.bio !== undefined) formData.append('bio', profileData.bio)
   if (profileData.image) formData.append('image', profileData.image)
+  if (profileData.first_name !== undefined) formData.append('first_name', profileData.first_name)
+  if (profileData.last_name !== undefined) formData.append('last_name', profileData.last_name)
+  if (profileData.email !== undefined) formData.append('email', profileData.email)
   const { data } = await api.patch<User>('/auth/user/', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   })
@@ -513,6 +548,55 @@ export interface TrendingPostsResponse {
 export async function fetchTrendingPosts(limit = 5): Promise<TrendingPostsResponse> {
   const { data } = await api.get<TrendingPostsResponse>('/posts/trending/', { params: { limit } })
   return data
+}
+
+// ============ NOTIFICATIONS API ============
+
+import type { AppNotification } from './types'
+
+export interface NotificationsResponse {
+  notifications: AppNotification[]
+  unread_count: number
+}
+
+export async function fetchNotifications(): Promise<NotificationsResponse> {
+  const { data } = await api.get<NotificationsResponse>('/notifications/')
+  return data
+}
+
+export async function fetchNotificationUnreadCount(): Promise<{ unread_count: number }> {
+  const { data } = await api.get<{ unread_count: number }>('/notifications/unread-count/')
+  return data
+}
+
+export async function markNotificationsRead(notificationIds?: number[]): Promise<void> {
+  await api.post('/notifications/mark-read/', notificationIds ? { notification_ids: notificationIds } : {})
+}
+
+// ============ SETTINGS API ============
+
+import type { UserSettings } from './types'
+
+export async function fetchUserSettings(): Promise<UserSettings> {
+  const { data } = await api.get<UserSettings>('/settings/')
+  return data
+}
+
+export async function updateUserSettings(settings: Partial<UserSettings>): Promise<UserSettings> {
+  const { data } = await api.patch<UserSettings>('/settings/', settings)
+  return data
+}
+
+export async function changePassword(currentPassword: string, newPassword: string): Promise<{ detail: string }> {
+  const { data } = await api.post<{ detail: string }>('/auth/password/', {
+    current_password: currentPassword,
+    new_password: newPassword,
+  })
+  return data
+}
+
+export async function deleteAccount(password: string): Promise<void> {
+  await api.post('/auth/delete-account/', { password })
 }
 
 // Default export for axios instance (for direct API calls)

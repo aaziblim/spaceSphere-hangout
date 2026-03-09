@@ -61,6 +61,7 @@ export interface User {
   profile?: {
     image?: string | null
     bio?: string
+    email_verified?: boolean
   }
 }
 
@@ -184,4 +185,34 @@ export interface MessageRequest {
   preview_message: string
   created_at: string
   status: 'pending' | 'accepted' | 'declined'
+}
+
+// ============ NOTIFICATIONS ============
+
+export interface AppNotification {
+  id: number
+  type: 'like' | 'comment' | 'follow' | 'reply'
+  actor: {
+    id: number
+    username: string
+    profile_image: string | null
+  }
+  post_slug: string | null
+  post_title: string | null
+  comment_id: number | null
+  is_read: boolean
+  created_at: string
+}
+
+// ============ SETTINGS ============
+
+export interface UserSettings {
+  notify_likes: boolean
+  notify_comments: boolean
+  notify_follows: boolean
+  notify_replies: boolean
+  email_notifications: boolean
+  profile_visibility: 'public' | 'followers' | 'private'
+  show_online_status: boolean
+  who_can_message: 'everyone' | 'followers' | 'nobody'
 }

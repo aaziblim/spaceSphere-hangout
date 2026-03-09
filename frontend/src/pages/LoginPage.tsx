@@ -117,12 +117,17 @@ export default function LoginPage() {
                 placeholder="Enter your password"
                 autoComplete="current-password"
                 className="w-full px-4 py-3 rounded-xl text-base focus:outline-none focus:ring-2 transition-all"
-                style={{ 
-                  backgroundColor: 'var(--bg-secondary)', 
+                style={{
+                  backgroundColor: 'var(--bg-secondary)',
                   color: 'var(--text-primary)',
                   border: '1px solid var(--border-light)'
                 }}
               />
+              <div className="mt-1.5 text-right">
+                <Link to="/forgot-password" className="text-xs font-medium hover:underline" style={{ color: 'var(--accent)' }}>
+                  Forgot password?
+                </Link>
+              </div>
             </div>
 
             <button

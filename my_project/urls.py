@@ -44,6 +44,10 @@ urlpatterns = [
     path('api/auth/logout/', users_api.logout_view, name='api-logout'),
     path('api/auth/register/', users_api.register_view, name='api-register'),
     path('api/auth/password/', users_api.password_change_view, name='api-password-change'),
+    path('api/auth/verify-email/', users_api.verify_email_view, name='api-verify-email'),
+    path('api/auth/verify-email/resend/', users_api.resend_verification_view, name='api-resend-verification'),
+    path('api/auth/password/reset/', users_api.password_reset_request_view, name='api-password-reset'),
+    path('api/auth/password/reset/confirm/', users_api.password_reset_confirm_view, name='api-password-reset-confirm'),
     path('api/users/following/', users_api.following_list_view, name='api-following-list'),
     path('api/users/<str:username>/', users_api.user_profile_view, name='api-user-profile'),
     path('api/users/<str:username>/follow/', users_api.follow_user_view, name='api-follow-user'),
@@ -69,6 +73,13 @@ urlpatterns = [
     path('api/achievements/pending/', users_api.pending_achievements_view, name='api-pending-achievements'),
     path('api/achievements/mark-shown/', users_api.mark_achievement_shown_view, name='api-mark-achievement-shown'),
     path('api/achievements/', users_api.all_achievements_view, name='api-all-achievements'),
+    # Notifications API
+    path('api/notifications/', users_api.notifications_list_view, name='api-notifications'),
+    path('api/notifications/unread-count/', users_api.notifications_unread_count_view, name='api-notifications-unread'),
+    path('api/notifications/mark-read/', users_api.notifications_mark_read_view, name='api-notifications-mark-read'),
+    # Settings API
+    path('api/settings/', users_api.user_settings_view, name='api-user-settings'),
+    path('api/auth/delete-account/', users_api.delete_account_view, name='api-delete-account'),
     # Trending & Views API
     path('api/posts/trending/', trending_posts_view, name='api-trending-posts'),
     path('api/posts/<str:slug>/view/', increment_post_views, name='api-increment-views'),
