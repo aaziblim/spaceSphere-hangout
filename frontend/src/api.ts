@@ -599,5 +599,57 @@ export async function deleteAccount(password: string): Promise<void> {
   await api.post('/auth/delete-account/', { password })
 }
 
+// ============ SPHERES / LIVEKIT API ============
+
+import type { SphereStatus, SphereJoinRequestItem } from './types'
+
+export interface SphereJoinResponse {
+  token: string
+  livekit_url: string
+  room_name: string
+  role: 'conductor' | 'speaker' | 'listener'
+}
+
+export async function fetchSphereStatus(slug: string): Promise<SphereStatus> {
+  const { data } = await api.get<SphereStatus>(`/spheres/${slug}/status/`)
+  return data
+}
+
+export async function createSphere(slug: string, title?: string): Promise<{ room_id: string; title: string; state: string }> {
+  const { data } = await api.post(`/spheres/${slug}/create/`, { title })
+  return data
+}
+
+export async function joinSphere(slug: string): Promise<SphereJoinResponse> {
+  const { data } = await api.post<SphereJoinResponse>(`/spheres/${slug}/join/`)
+  return data
+}
+
+export async function leaveSphere(slug: string): Promise<void> {
+  await api.post(`/spheres/${slug}/leave/`)
+}
+
+export async function endSphere(slug: string): Promise<void> {
+  await api.post(`/spheres/${slug}/end/`)
+}
+
+export async function requestJoinSphere(slug: string): Promise<{ status: string; created: boolean }> {
+  const { data } = await api.post(`/spheres/${slug}/request-join/`)
+  return data
+}
+
+export async function fetchSphereRequests(slug: string): Promise<{ requests: SphereJoinRequestItem[] }> {
+  const { data } = await api.get(`/spheres/${slug}/requests/`)
+  return data
+}
+
+export async function approveSphereRequest(slug: string, requestId: number): Promise<void> {
+  await api.post(`/spheres/${slug}/approve/`, { request_id: requestId })
+}
+
+export async function denySphereRequest(slug: string, requestId: number): Promise<void> {
+  await api.post(`/spheres/${slug}/deny/`, { request_id: requestId })
+}
+
 // Default export for axios instance (for direct API calls)
 export default api

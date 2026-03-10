@@ -236,3 +236,77 @@ class LivestreamBan(models.Model):
 
     def __str__(self):
         return f'{self.user.username} banned from {self.stream_id}'
+
+
+class SphereRoom(models.Model):
+    """An audio room tied to a community, powered by LiveKit."""
+    STATE_CHOICES = [
+        ('live', 'Live'),
+        ('ended', 'Ended'),
+    ]
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    community = models.ForeignKey(Community, on_delete=models.CASCADE, related_name='sphere_rooms')
+    title = models.CharField(max_length=200, blank=True, default='')
+    state = models.CharField(max_length=10, choices=STATE_CHOICES, default='live')
+    creator = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='created_spheres')
+    participant_count = models.PositiveIntegerField(default=0)
+    is_locked = models.BooleanField(default=False)
+    started_at = models.DateTimeField(auto_now_add=True)
+    ended_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-started_at']
+
+    def __str__(self):
+        return f'Sphere: {self.community.name} ({self.state})'
+
+    def end(self):
+        self.state = 'ended'
+        self.ended_at = timezone.now()
+        self.save(update_fields=['state', 'ended_at'])
+
+
+class SphereParticipant(models.Model):
+    """A user's participation in a sphere room."""
+    ROLE_CHOICES = [
+        ('conductor', 'Conductor'),
+        ('speaker', 'Speaker'),
+        ('listener', 'Listener'),
+    ]
+    room = models.ForeignKey(SphereRoom, on_delete=models.CASCADE, related_name='participants')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sphere_participations')
+    role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='listener')
+    is_muted = models.BooleanField(default=True)
+    hand_raised_at = models.DateTimeField(null=True, blank=True)
+    joined_at = models.DateTimeField(auto_now_add=True)
+    left_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        unique_together = ('room', 'user')
+
+    def __str__(self):
+        return f'{self.user.username} in {self.room} ({self.role})'
+
+
+class SphereJoinRequest(models.Model):
+    """A non-member's request to join an active Sphere."""
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('approved', 'Approved'),
+        ('denied', 'Denied'),
+    ]
+    room = models.ForeignKey(SphereRoom, on_delete=models.CASCADE, related_name='join_requests')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sphere_join_requests')
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
+    created_at = models.DateTimeField(auto_now_add=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    reviewed_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True, related_name='reviewed_sphere_requests'
+    )
+
+    class Meta:
+        unique_together = ('room', 'user')
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.user.username} -> {self.room} ({self.status})'

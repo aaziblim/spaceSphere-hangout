@@ -16,6 +16,7 @@ export interface Community {
   cover_image_url?: string | null
   creator: Author
   is_member: boolean
+  user_role: 'admin' | 'moderator' | 'member' | null
   posts_count: number
   members_count: number
   is_private: boolean
@@ -110,37 +111,6 @@ export interface UserProfile {
   posts?: Post[]
 }
 
-// ============ ANALYTICS ============
-
-export interface CreatorAnalytics {
-  overview: {
-    total_views: number
-    total_likes: number
-    total_comments: number
-    total_followers: number
-    views_change: number // percentage change from last period
-    likes_change: number
-    followers_change: number
-  }
-  chart_data: {
-    date: string
-    views: number
-    likes: number
-    followers: number
-  }[]
-  top_posts: {
-    id: string
-    title: string
-    views: number
-    likes: number
-    engagement_rate: number
-  }[]
-  audience: {
-    countries: { name: string; percentage: number }[]
-    age_groups: { range: string; percentage: number }[]
-  }
-}
-
 // ============ CHAT / MESSAGING ============
 
 export interface ChatParticipant {
@@ -191,7 +161,7 @@ export interface MessageRequest {
 
 export interface AppNotification {
   id: number
-  type: 'like' | 'comment' | 'follow' | 'reply'
+  type: 'like' | 'comment' | 'follow' | 'reply' | 'sphere'
   actor: {
     id: number
     username: string
@@ -200,6 +170,7 @@ export interface AppNotification {
   post_slug: string | null
   post_title: string | null
   comment_id: number | null
+  community_slug: string | null
   is_read: boolean
   created_at: string
 }
@@ -215,4 +186,26 @@ export interface UserSettings {
   profile_visibility: 'public' | 'followers' | 'private'
   show_online_status: boolean
   who_can_message: 'everyone' | 'followers' | 'nobody'
+}
+
+// ============ SPHERES ============
+
+export interface SphereStatus {
+  is_live: boolean
+  participant_count: number
+  title: string | null
+  conductor: {
+    user_id: number
+    username: string
+    profile_image: string | null
+  } | null
+  room_id: string | null
+}
+
+export interface SphereJoinRequestItem {
+  id: number
+  user_id: number
+  username: string
+  profile_image: string | null
+  created_at: string
 }

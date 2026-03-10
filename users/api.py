@@ -1356,12 +1356,13 @@ def _serialize_notification(n):
         'post_slug': n.post_slug or None,
         'post_title': n.post_title or None,
         'comment_id': n.comment_id,
+        'community_slug': n.community_slug or None,
         'is_read': n.is_read,
         'created_at': n.created_at.isoformat(),
     }
 
 
-def create_notification(recipient, actor, notification_type, post_slug='', post_title='', comment_id=None):
+def create_notification(recipient, actor, notification_type, post_slug='', post_title='', comment_id=None, community_slug=''):
     """
     Create a notification and broadcast it via WebSocket.
     Does nothing if actor == recipient (no self-notifications).
@@ -1376,6 +1377,7 @@ def create_notification(recipient, actor, notification_type, post_slug='', post_
         post_slug=post_slug,
         post_title=post_title,
         comment_id=comment_id,
+        community_slug=community_slug,
     )
 
     # Broadcast via channel layer (fire-and-forget from sync context)
@@ -1623,3 +1625,686 @@ def delete_account_view(request):
     request.user.delete()
     logger.info('Account deleted: username=%s', username)
     return Response({'detail': 'Account deleted successfully.'})
+
+
+# ============ SPHERES / LIVEKIT ============
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def sphere_join_view(request, slug):
+    """
+    Join a Sphere audio room. Returns a LiveKit access token.
+    Requires an active room to exist (created via sphere_create_view).
+    """
+    from blog.models import Community, CommunityMembership, SphereRoom, SphereParticipant
+    from django.conf import settings as django_settings
+
+    try:
+        community = Community.objects.get(slug=slug)
+    except Community.DoesNotExist:
+        return Response({'error': 'Community not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    # Must be a community member
+    membership = CommunityMembership.objects.filter(
+        user=request.user, community=community
+    ).first()
+
+    if not membership:
+        return Response(
+            {'error': 'You must be a member to join this sphere'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    # Map community role → sphere role
+    is_privileged = membership.role in ('admin', 'moderator')
+    sphere_role = 'conductor' if is_privileged else 'listener'
+
+    # Room must already exist
+    room = SphereRoom.objects.filter(community=community, state='live').first()
+    if not room:
+        return Response(
+            {'error': 'No active Sphere. A conductor must start one first.'},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    # Check if room is locked
+    if room.is_locked and not is_privileged:
+        return Response(
+            {'error': 'This sphere is currently locked'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    # Create or update SphereParticipant
+    participant, created = SphereParticipant.objects.update_or_create(
+        room=room, user=request.user,
+        defaults={'role': sphere_role, 'left_at': None, 'hand_raised_at': None},
+    )
+
+    # Update participant count
+    active_count = SphereParticipant.objects.filter(room=room, left_at__isnull=True).count()
+    room.participant_count = active_count
+    room.save(update_fields=['participant_count'])
+
+    # Generate LiveKit JWT
+    from livekit.api import AccessToken, VideoGrants
+
+    room_name = f'sphere_{slug}'
+    token = AccessToken(
+        api_key=django_settings.LIVEKIT_API_KEY,
+        api_secret=django_settings.LIVEKIT_API_SECRET,
+    )
+    token.identity = str(request.user.id)
+    token.name = request.user.username
+
+    profile_image = None
+    if hasattr(request.user, 'profile') and request.user.profile.image:
+        profile_image = request.build_absolute_uri(request.user.profile.image.url)
+
+    token.metadata = str({
+        'username': request.user.username,
+        'profile_image': profile_image,
+        'community_role': membership.role,
+    })
+
+    grant = VideoGrants(
+        room_join=True,
+        room=room_name,
+        can_publish=sphere_role in ('conductor', 'speaker'),
+        can_subscribe=True,
+    )
+    token.add_grant(grant)
+
+    return Response({
+        'token': token.to_jwt(),
+        'livekit_url': django_settings.LIVEKIT_URL,
+        'room_name': room_name,
+        'role': sphere_role,
+    })
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def sphere_leave_view(request, slug):
+    """Leave a Sphere audio room."""
+    from blog.models import Community, SphereRoom, SphereParticipant
+
+    try:
+        community = Community.objects.get(slug=slug)
+    except Community.DoesNotExist:
+        return Response({'error': 'Community not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    room = SphereRoom.objects.filter(community=community, state='live').first()
+    if not room:
+        return Response({'detail': 'No active sphere'})
+
+    participant = SphereParticipant.objects.filter(room=room, user=request.user, left_at__isnull=True).first()
+    if participant:
+        participant.left_at = timezone.now()
+        participant.save(update_fields=['left_at'])
+
+    # Update count
+    active_count = SphereParticipant.objects.filter(room=room, left_at__isnull=True).count()
+    room.participant_count = active_count
+    room.save(update_fields=['participant_count'])
+
+    # Auto-end empty room
+    if active_count == 0:
+        room.end()
+
+    return Response({'detail': 'Left sphere'})
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def sphere_end_view(request, slug):
+    """End a Sphere audio room. Only the conductor (admin/mod) can do this."""
+    from blog.models import Community, CommunityMembership, SphereRoom, SphereParticipant
+
+    try:
+        community = Community.objects.get(slug=slug)
+    except Community.DoesNotExist:
+        return Response({'error': 'Community not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    # Only admin/mod can force-end
+    membership = CommunityMembership.objects.filter(
+        user=request.user, community=community, role__in=('admin', 'moderator')
+    ).first()
+    if not membership:
+        return Response({'error': 'Only admins and moderators can end a sphere'}, status=status.HTTP_403_FORBIDDEN)
+
+    room = SphereRoom.objects.filter(community=community, state='live').first()
+    if not room:
+        return Response({'error': 'No active sphere'}, status=status.HTTP_404_NOT_FOUND)
+
+    # Mark all active participants as left
+    SphereParticipant.objects.filter(room=room, left_at__isnull=True).update(left_at=timezone.now())
+
+    # End the room
+    room.end()
+
+    return Response({'detail': 'Sphere ended'})
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def sphere_participants_view(request, slug):
+    """List active participants in a Sphere."""
+    from blog.models import Community, SphereRoom, SphereParticipant
+
+    try:
+        community = Community.objects.get(slug=slug)
+    except Community.DoesNotExist:
+        return Response({'error': 'Community not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    room = SphereRoom.objects.filter(community=community, state='live').first()
+    if not room:
+        return Response({'participants': []})
+
+    participants = SphereParticipant.objects.filter(
+        room=room, left_at__isnull=True
+    ).select_related('user', 'user__profile')
+
+    data = []
+    for p in participants:
+        profile_img = None
+        if hasattr(p.user, 'profile') and p.user.profile.image:
+            profile_img = request.build_absolute_uri(p.user.profile.image.url)
+        data.append({
+            'user_id': p.user.id,
+            'username': p.user.username,
+            'profile_image': profile_img,
+            'role': p.role,
+            'is_muted': p.is_muted,
+            'hand_raised': p.hand_raised_at is not None,
+        })
+
+    return Response({'participants': data})
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def sphere_hand_raise_view(request, slug):
+    """Toggle hand raise in a Sphere."""
+    from blog.models import Community, SphereRoom, SphereParticipant
+
+    try:
+        community = Community.objects.get(slug=slug)
+    except Community.DoesNotExist:
+        return Response({'error': 'Community not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    room = SphereRoom.objects.filter(community=community, state='live').first()
+    if not room:
+        return Response({'error': 'No active sphere'}, status=status.HTTP_404_NOT_FOUND)
+
+    participant = SphereParticipant.objects.filter(
+        room=room, user=request.user, left_at__isnull=True
+    ).first()
+    if not participant:
+        return Response({'error': 'Not in this sphere'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Toggle
+    if participant.hand_raised_at:
+        participant.hand_raised_at = None
+    else:
+        participant.hand_raised_at = timezone.now()
+    participant.save(update_fields=['hand_raised_at'])
+
+    # Broadcast via Channels
+    raised = participant.hand_raised_at is not None
+    try:
+        from channels.layers import get_channel_layer
+        from asgiref.sync import async_to_sync
+        channel_layer = get_channel_layer()
+        if channel_layer:
+            async_to_sync(channel_layer.group_send)(
+                f'sphere_{slug}',
+                {
+                    'type': 'hand_raise',
+                    'user_id': request.user.id,
+                    'username': request.user.username,
+                    'raised': raised,
+                }
+            )
+    except Exception:
+        pass
+
+    return Response({'raised': raised})
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def sphere_promote_view(request, slug):
+    """Host promotes a listener to speaker."""
+    from blog.models import Community, CommunityMembership, SphereRoom, SphereParticipant
+    from django.conf import settings as django_settings
+
+    try:
+        community = Community.objects.get(slug=slug)
+    except Community.DoesNotExist:
+        return Response({'error': 'Community not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    # Check caller is host
+    caller_membership = CommunityMembership.objects.filter(
+        user=request.user, community=community, role__in=('admin', 'moderator')
+    ).first()
+    if not caller_membership:
+        return Response({'error': 'Only hosts can promote'}, status=status.HTTP_403_FORBIDDEN)
+
+    target_user_id = request.data.get('user_id')
+    if not target_user_id:
+        return Response({'error': 'user_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    room = SphereRoom.objects.filter(community=community, state='live').first()
+    if not room:
+        return Response({'error': 'No active sphere'}, status=status.HTTP_404_NOT_FOUND)
+
+    participant = SphereParticipant.objects.filter(
+        room=room, user_id=target_user_id, left_at__isnull=True
+    ).first()
+    if not participant:
+        return Response({'error': 'User not in sphere'}, status=status.HTTP_400_BAD_REQUEST)
+
+    participant.role = 'speaker'
+    participant.hand_raised_at = None
+    participant.save(update_fields=['role', 'hand_raised_at'])
+
+    # Update LiveKit permissions to allow publishing
+    try:
+        from livekit.api import LiveKitAPI
+        import asyncio
+        lk = LiveKitAPI(
+            url=django_settings.LIVEKIT_URL.replace('ws://', 'http://').replace('wss://', 'https://'),
+            api_key=django_settings.LIVEKIT_API_KEY,
+            api_secret=django_settings.LIVEKIT_API_SECRET,
+        )
+        asyncio.run(lk.room.update_participant(
+            room=f'sphere_{slug}',
+            identity=str(target_user_id),
+            permission={'can_publish': True, 'can_subscribe': True},
+        ))
+    except Exception:
+        pass  # LiveKit update is best-effort
+
+    # Broadcast role change
+    try:
+        from channels.layers import get_channel_layer
+        from asgiref.sync import async_to_sync
+        channel_layer = get_channel_layer()
+        if channel_layer:
+            async_to_sync(channel_layer.group_send)(
+                f'sphere_{slug}',
+                {
+                    'type': 'role_change',
+                    'user_id': int(target_user_id),
+                    'new_role': 'speaker',
+                }
+            )
+    except Exception:
+        pass
+
+    return Response({'detail': 'User promoted to speaker'})
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def sphere_demote_view(request, slug):
+    """Host demotes a speaker to listener."""
+    from blog.models import Community, CommunityMembership, SphereRoom, SphereParticipant
+    from django.conf import settings as django_settings
+
+    try:
+        community = Community.objects.get(slug=slug)
+    except Community.DoesNotExist:
+        return Response({'error': 'Community not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    caller_membership = CommunityMembership.objects.filter(
+        user=request.user, community=community, role__in=('admin', 'moderator')
+    ).first()
+    if not caller_membership:
+        return Response({'error': 'Only hosts can demote'}, status=status.HTTP_403_FORBIDDEN)
+
+    target_user_id = request.data.get('user_id')
+    if not target_user_id:
+        return Response({'error': 'user_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    room = SphereRoom.objects.filter(community=community, state='live').first()
+    if not room:
+        return Response({'error': 'No active sphere'}, status=status.HTTP_404_NOT_FOUND)
+
+    participant = SphereParticipant.objects.filter(
+        room=room, user_id=target_user_id, left_at__isnull=True
+    ).first()
+    if not participant:
+        return Response({'error': 'User not in sphere'}, status=status.HTTP_400_BAD_REQUEST)
+
+    participant.role = 'listener'
+    participant.save(update_fields=['role'])
+
+    # Revoke LiveKit publish permission
+    try:
+        from livekit.api import LiveKitAPI
+        import asyncio
+        lk = LiveKitAPI(
+            url=django_settings.LIVEKIT_URL.replace('ws://', 'http://').replace('wss://', 'https://'),
+            api_key=django_settings.LIVEKIT_API_KEY,
+            api_secret=django_settings.LIVEKIT_API_SECRET,
+        )
+        asyncio.run(lk.room.update_participant(
+            room=f'sphere_{slug}',
+            identity=str(target_user_id),
+            permission={'can_publish': False, 'can_subscribe': True},
+        ))
+    except Exception:
+        pass
+
+    # Broadcast role change
+    try:
+        from channels.layers import get_channel_layer
+        from asgiref.sync import async_to_sync
+        channel_layer = get_channel_layer()
+        if channel_layer:
+            async_to_sync(channel_layer.group_send)(
+                f'sphere_{slug}',
+                {
+                    'type': 'role_change',
+                    'user_id': int(target_user_id),
+                    'new_role': 'listener',
+                }
+            )
+    except Exception:
+        pass
+
+    return Response({'detail': 'User demoted to listener'})
+
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def sphere_status_view(request, slug):
+    """Return current sphere status for a community (used by CommunityPage smart button)."""
+    from blog.models import Community, SphereRoom, SphereParticipant
+
+    try:
+        community = Community.objects.get(slug=slug)
+    except Community.DoesNotExist:
+        return Response({'error': 'Community not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    room = SphereRoom.objects.filter(community=community, state='live').first()
+
+    if not room:
+        return Response({
+            'is_live': False,
+            'participant_count': 0,
+            'title': None,
+            'conductor': None,
+            'room_id': None,
+        })
+
+    conductor_participant = SphereParticipant.objects.filter(
+        room=room, role='conductor', left_at__isnull=True
+    ).select_related('user', 'user__profile').first()
+
+    conductor_data = None
+    if conductor_participant:
+        profile_img = None
+        if hasattr(conductor_participant.user, 'profile') and conductor_participant.user.profile.image:
+            profile_img = request.build_absolute_uri(conductor_participant.user.profile.image.url)
+        conductor_data = {
+            'user_id': conductor_participant.user.id,
+            'username': conductor_participant.user.username,
+            'profile_image': profile_img,
+        }
+
+    return Response({
+        'is_live': True,
+        'participant_count': room.participant_count,
+        'title': room.title or community.name,
+        'conductor': conductor_data,
+        'room_id': str(room.id),
+    })
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def sphere_create_view(request, slug):
+    """Create a new Sphere audio room. Only admins/moderators can create."""
+    from blog.models import Community, CommunityMembership, SphereRoom, SphereParticipant
+
+    try:
+        community = Community.objects.get(slug=slug)
+    except Community.DoesNotExist:
+        return Response({'error': 'Community not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    membership = CommunityMembership.objects.filter(
+        user=request.user, community=community, role__in=('admin', 'moderator')
+    ).first()
+    if not membership:
+        return Response(
+            {'error': 'Only admins and moderators can start a Sphere'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    existing = SphereRoom.objects.filter(community=community, state='live').first()
+    if existing:
+        return Response(
+            {'error': 'A Sphere is already live in this community'},
+            status=status.HTTP_409_CONFLICT,
+        )
+
+    title = request.data.get('title', '').strip() or community.name
+    room = SphereRoom.objects.create(
+        community=community,
+        title=title,
+        creator=request.user,
+        state='live',
+    )
+
+    SphereParticipant.objects.create(
+        room=room,
+        user=request.user,
+        role='conductor',
+        is_muted=True,
+    )
+    room.participant_count = 1
+    room.save(update_fields=['participant_count'])
+
+    # Notify all community members (excluding creator)
+    from django.contrib.auth.models import User as AuthUser
+    member_ids = list(
+        CommunityMembership.objects.filter(community=community)
+        .exclude(user=request.user)
+        .values_list('user_id', flat=True)
+    )
+
+    if member_ids:
+        notifications = [
+            Notification(
+                recipient_id=uid,
+                actor=request.user,
+                notification_type='sphere',
+                post_title=community.name,
+                community_slug=community.slug,
+            )
+            for uid in member_ids
+        ]
+        Notification.objects.bulk_create(notifications)
+
+        # Broadcast via WebSocket
+        try:
+            from channels.layers import get_channel_layer
+            from asgiref.sync import async_to_sync
+            channel_layer = get_channel_layer()
+            if channel_layer:
+                created_notifications = Notification.objects.filter(
+                    actor=request.user,
+                    notification_type='sphere',
+                    community_slug=community.slug,
+                ).select_related('actor', 'actor__profile').order_by('-created_at')[:len(member_ids)]
+                for n in created_notifications:
+                    async_to_sync(channel_layer.group_send)(
+                        f'notifications_{n.recipient_id}',
+                        {
+                            'type': 'send_notification',
+                            'notification': _serialize_notification(n),
+                        }
+                    )
+        except Exception:
+            pass
+
+    return Response({
+        'room_id': str(room.id),
+        'title': room.title,
+        'state': room.state,
+    }, status=status.HTTP_201_CREATED)
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def sphere_request_join_view(request, slug):
+    """Non-member requests to join a live Sphere."""
+    from blog.models import Community, CommunityMembership, SphereRoom, SphereJoinRequest
+
+    try:
+        community = Community.objects.get(slug=slug)
+    except Community.DoesNotExist:
+        return Response({'error': 'Community not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    is_member = CommunityMembership.objects.filter(user=request.user, community=community).exists()
+    if is_member:
+        return Response({'error': 'You are already a member. Use join instead.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    room = SphereRoom.objects.filter(community=community, state='live').first()
+    if not room:
+        return Response({'error': 'No active Sphere'}, status=status.HTTP_404_NOT_FOUND)
+
+    join_request, created = SphereJoinRequest.objects.get_or_create(
+        room=room, user=request.user,
+        defaults={'status': 'pending'}
+    )
+
+    if not created and join_request.status == 'denied':
+        return Response({'error': 'Your request was denied'}, status=status.HTTP_403_FORBIDDEN)
+
+    return Response({
+        'status': join_request.status,
+        'created': created,
+    }, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def sphere_pending_requests_view(request, slug):
+    """Get pending join requests (for conductor)."""
+    from blog.models import Community, CommunityMembership, SphereRoom, SphereJoinRequest
+
+    try:
+        community = Community.objects.get(slug=slug)
+    except Community.DoesNotExist:
+        return Response({'error': 'Community not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    if not CommunityMembership.objects.filter(
+        user=request.user, community=community, role__in=('admin', 'moderator')
+    ).exists():
+        return Response({'error': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
+
+    room = SphereRoom.objects.filter(community=community, state='live').first()
+    if not room:
+        return Response({'requests': []})
+
+    requests_qs = SphereJoinRequest.objects.filter(
+        room=room, status='pending'
+    ).select_related('user', 'user__profile')
+
+    data = []
+    for jr in requests_qs:
+        profile_img = None
+        if hasattr(jr.user, 'profile') and jr.user.profile.image:
+            profile_img = request.build_absolute_uri(jr.user.profile.image.url)
+        data.append({
+            'id': jr.id,
+            'user_id': jr.user.id,
+            'username': jr.user.username,
+            'profile_image': profile_img,
+            'created_at': jr.created_at.isoformat(),
+        })
+
+    return Response({'requests': data})
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def sphere_approve_request_view(request, slug):
+    """Conductor approves a join request."""
+    from blog.models import Community, CommunityMembership, SphereRoom, SphereJoinRequest
+
+    try:
+        community = Community.objects.get(slug=slug)
+    except Community.DoesNotExist:
+        return Response({'error': 'Community not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    if not CommunityMembership.objects.filter(
+        user=request.user, community=community, role__in=('admin', 'moderator')
+    ).exists():
+        return Response({'error': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
+
+    request_id = request.data.get('request_id')
+    if not request_id:
+        return Response({'error': 'request_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    room = SphereRoom.objects.filter(community=community, state='live').first()
+    if not room:
+        return Response({'error': 'No active Sphere'}, status=status.HTTP_404_NOT_FOUND)
+
+    try:
+        jr = SphereJoinRequest.objects.get(id=request_id, room=room, status='pending')
+    except SphereJoinRequest.DoesNotExist:
+        return Response({'error': 'Request not found or already reviewed'}, status=status.HTTP_404_NOT_FOUND)
+
+    jr.status = 'approved'
+    jr.reviewed_at = timezone.now()
+    jr.reviewed_by = request.user
+    jr.save(update_fields=['status', 'reviewed_at', 'reviewed_by'])
+
+    # Auto-add as community member so they can join the sphere
+    CommunityMembership.objects.get_or_create(
+        user=jr.user, community=community,
+        defaults={'role': 'member'}
+    )
+
+    return Response({'detail': 'Request approved'})
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def sphere_deny_request_view(request, slug):
+    """Conductor denies a join request."""
+    from blog.models import Community, CommunityMembership, SphereRoom, SphereJoinRequest
+
+    try:
+        community = Community.objects.get(slug=slug)
+    except Community.DoesNotExist:
+        return Response({'error': 'Community not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    if not CommunityMembership.objects.filter(
+        user=request.user, community=community, role__in=('admin', 'moderator')
+    ).exists():
+        return Response({'error': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
+
+    request_id = request.data.get('request_id')
+    if not request_id:
+        return Response({'error': 'request_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    room = SphereRoom.objects.filter(community=community, state='live').first()
+    if not room:
+        return Response({'error': 'No active Sphere'}, status=status.HTTP_404_NOT_FOUND)
+
+    try:
+        jr = SphereJoinRequest.objects.get(id=request_id, room=room, status='pending')
+    except SphereJoinRequest.DoesNotExist:
+        return Response({'error': 'Request not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    jr.status = 'denied'
+    jr.reviewed_at = timezone.now()
+    jr.reviewed_by = request.user
+    jr.save(update_fields=['status', 'reviewed_at', 'reviewed_by'])
+
+    return Response({'detail': 'Request denied'})

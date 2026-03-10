@@ -192,6 +192,7 @@ export default function UserProfilePage() {
                 </button>
                 <button
                   onClick={() => setChatOpen(true)}
+                  aria-label="Send message"
                   className="px-5 py-2.5 rounded-xl transition-all active:scale-[0.98]"
                   style={{
                     backgroundColor: 'var(--bg-tertiary)',

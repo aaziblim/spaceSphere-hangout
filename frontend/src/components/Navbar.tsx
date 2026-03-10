@@ -89,7 +89,7 @@ export default function Navbar() {
 
                   {/* Profile dropdown */}
                   <div className="relative group">
-                    <button className="flex items-center">
+                    <button className="flex items-center" aria-label="Profile menu">
                       <div className="w-9 h-9 rounded-full overflow-hidden border-2 transition-colors" style={{ borderColor: 'var(--border)' }}>
                         {user.profile?.image ? (
                           <img src={user.profile.image} alt="" className="w-full h-full object-cover" />

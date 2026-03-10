@@ -436,6 +436,11 @@ PASSWORD_RESET_TIMEOUT = 86400
 PAYSTACK_SECRET_KEY = os.environ.get('PAYSTACK_SECRET_KEY', 'sk_test_xxxxxxxxxxxxxxxxxxxxx')
 PAYSTACK_PUBLIC_KEY = os.environ.get('PAYSTACK_PUBLIC_KEY', 'pk_test_xxxxxxxxxxxxxxxxxxxxx')
 
+# LiveKit Configuration (Audio Spheres)
+LIVEKIT_URL = os.environ.get('LIVEKIT_URL', 'ws://localhost:7880')
+LIVEKIT_API_KEY = os.environ.get('LIVEKIT_API_KEY', 'devkey')
+LIVEKIT_API_SECRET = os.environ.get('LIVEKIT_API_SECRET', '')
+
 
 
 

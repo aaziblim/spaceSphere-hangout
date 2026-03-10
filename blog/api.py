@@ -37,6 +37,7 @@ class AuthorSerializer(serializers.ModelSerializer):
 class CommunitySerializer(serializers.ModelSerializer):
     creator = AuthorSerializer(read_only=True)
     is_member = serializers.SerializerMethodField()
+    user_role = serializers.SerializerMethodField()
     posts_count = serializers.IntegerField(read_only=True)
     members_count = serializers.IntegerField(read_only=True)
     icon_url = serializers.SerializerMethodField()
@@ -46,7 +47,7 @@ class CommunitySerializer(serializers.ModelSerializer):
         model = Community
         fields = [
             'id', 'name', 'slug', 'description', 'icon', 'cover_image',
-            'icon_url', 'cover_image_url', 'creator', 'is_member',
+            'icon_url', 'cover_image_url', 'creator', 'is_member', 'user_role',
             'posts_count', 'members_count', 'is_private', 'created_at'
         ]
         read_only_fields = ['id', 'slug', 'creator', 'posts_count', 'members_count', 'created_at']
@@ -56,6 +57,15 @@ class CommunitySerializer(serializers.ModelSerializer):
         if not request or not request.user.is_authenticated:
             return False
         return obj.members.filter(pk=request.user.pk).exists()
+
+    def get_user_role(self, obj) -> Optional[str]:
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return None
+        membership = CommunityMembership.objects.filter(
+            user=request.user, community=obj
+        ).first()
+        return membership.role if membership else None
 
     def get_icon_url(self, obj) -> Optional[str]:
         if not obj.icon: return None

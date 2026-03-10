@@ -14,7 +14,7 @@ Spherespace is a real-time social platform for creators and communities. It comb
 | Gamification | Achievement badges, activity streaks, karma system |
 | Creators | Verified badges, analytics dashboard, payment integration |
 | Live Streaming | WebSocket chat, screen sharing, viewer moderation, stream categories, post-stream summary |
-| Audio Spaces | Real-time spatial audio rooms with physics-based orbs and emote bursts |
+| Audio Spaces | Real-time spatial audio rooms with physics-based orbs, Conductor role, guest approval, and emote bursts |
 | Payments | Paystack integration, subscription tiers (Blue, Premium, Organization), webhooks |
 | UI/UX | Dark/light/system themes, skeleton loading, micro-interactions, custom 404 page |
 
@@ -87,7 +87,7 @@ my_project/
 │   ├── consumers.py     # WebSocket consumers (chat, notifications, spheres)
 │   └── signals.py       # Auto-create Profile and UserSettings on registration
 ├── blog/                # Content management
-│   ├── models.py        # Post, Comment, Community, Livestream, LivestreamBan
+│   ├── models.py        # Post, Comment, Community, Livestream, SphereRoom, SphereParticipant, SphereJoinRequest
 │   ├── api.py           # Posts, comments, communities, livestreaming API
 │   ├── consumers.py     # Livestream WebSocket consumer
 │   └── routing.py       # WebSocket URL routing
@@ -208,6 +208,72 @@ sequenceDiagram
     WS-->>Viewer: stream_ended
     Note over Host: Summary modal shown
     Host->>API: POST /posts/ (recording) or discard
+```
+
+---
+
+## Spheres (Audio Spaces) Architecture
+
+Spheres are live audio rooms tied to communities. They use **LiveKit SFU** for audio transport and **Django Channels** for real-time orb physics, emote bursts, and moderation events.
+
+### Roles
+
+| Role | Permissions |
+|------|-------------|
+| **Conductor** | Create/end sphere, approve join requests, mute speakers, remove users, lock room |
+| **Speaker** | Publish audio, send emotes |
+| **Listener** | Listen, raise hand, send emotes |
+
+### Creation & Join Flow
+
+```mermaid
+sequenceDiagram
+    participant Admin as Conductor (Admin/Mod)
+    participant API as REST API
+    participant Members as Community Members
+    participant Guest as Non-Member
+
+    Admin->>API: POST /api/spheres/{slug}/create/
+    API-->>Admin: Room created, conductor role assigned
+    API-->>Members: Notification: "Sphere opened in {community}"
+
+    Members->>API: POST /api/spheres/{slug}/join/
+    API-->>Members: LiveKit token (listener role)
+
+    Guest->>API: POST /api/spheres/{slug}/request-join/
+    API-->>Guest: Request pending
+    API-->>Admin: Request appears in conductor panel
+    Admin->>API: POST /api/spheres/{slug}/approve/
+    API-->>Guest: Now a community member, can join
+
+    Admin->>API: POST /api/spheres/{slug}/end/
+    API-->>Members: Sphere ended
+```
+
+### Sphere API Endpoints
+
+```bash
+# Sphere lifecycle
+GET  /api/spheres/{slug}/status/       # Public — is_live, participant_count, conductor info
+POST /api/spheres/{slug}/create/       # Admin/mod — create sphere, notify all members
+POST /api/spheres/{slug}/join/         # Member — get LiveKit token
+POST /api/spheres/{slug}/leave/        # Participant — leave sphere (auto-ends if empty)
+POST /api/spheres/{slug}/end/          # Conductor — force end sphere for everyone
+
+# Guest approval
+POST /api/spheres/{slug}/request-join/ # Non-member — request access
+GET  /api/spheres/{slug}/requests/     # Conductor — list pending requests
+POST /api/spheres/{slug}/approve/      # Conductor — approve (auto-creates membership)
+POST /api/spheres/{slug}/deny/         # Conductor — deny request
+
+# In-room controls
+POST /api/spheres/{slug}/hand-raise/   # Listener — raise/lower hand
+POST /api/spheres/{slug}/promote/      # Conductor — promote listener to speaker
+POST /api/spheres/{slug}/demote/       # Conductor — demote speaker to listener
+GET  /api/spheres/{slug}/participants/ # List active participants
+
+# WebSocket
+WS   /ws/spheres/{slug}/              # Orb physics, emote bursts, moderation events
 ```
 
 ---
@@ -369,6 +435,15 @@ GET  /api/payments/verify/{ref}/
 GET  /api/payments/subscription/
 POST /api/payments/cancel/
 
+# Spheres (Audio Spaces)
+GET  /api/spheres/{slug}/status/       # Check if sphere is live
+POST /api/spheres/{slug}/create/       # Start a sphere (admin/mod)
+POST /api/spheres/{slug}/join/         # Join sphere (get LiveKit token)
+POST /api/spheres/{slug}/leave/        # Leave sphere
+POST /api/spheres/{slug}/end/          # End sphere (conductor)
+POST /api/spheres/{slug}/request-join/ # Request to join (non-member)
+POST /api/spheres/{slug}/approve/      # Approve join request (conductor)
+
 # WebSocket Endpoints
 WS   /ws/chat/                   # Real-time messaging, typing, read receipts
 WS   /ws/notifications/          # Real-time notification delivery
@@ -499,8 +574,20 @@ Shimmer loading states across all pages for a polished experience.
 - Premium transparent overlays for stream controls
 - Confirmation dialogs for critical actions (end stream, delete)
 
+### Audio Spaces (Spheres)
+- **Conductor role** — renamed from "host" to match the cosmic theme
+- **Smart sphere button** on community pages — context-aware: Start (admin/mod), Join (member), Request to Join (guest)
+- **Creation modal** — title input with auto-notify to all community members
+- **Guest approval flow** — non-members request access, conductor approves/denies from inside the room
+- **End sphere** — conductor can force-end for all participants from the dock
+- **Pulsing live indicator** — animated green dot when a sphere is active
+- **Request panel** — glass-morphism dropdown for conductor with pending count badge
+
 ## Roadmap
 
+- [x] Sphere creation flow with conductor role
+- [x] Guest request-to-join approval system
+- [x] Sphere lifecycle management (create, join, leave, end)
 - [ ] Push notifications
 - [ ] Voice/video calling
 - [ ] Stories feature

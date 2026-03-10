@@ -687,6 +687,7 @@ export default function StreamViewerPage() {
                 {isFullscreen && (
                   <button
                     type="button"
+                    aria-label="Go back"
                     onClick={(e) => {
                       e.stopPropagation()
                       toggleFullscreen()
@@ -729,6 +730,7 @@ export default function StreamViewerPage() {
                 {isHost && stream.is_live && (
                   <button
                     type="button"
+                    aria-label="Flip camera"
                     onClick={(e) => {
                       e.stopPropagation()
                       setFacingMode(prev => prev === 'user' ? 'environment' : 'user')
@@ -746,6 +748,7 @@ export default function StreamViewerPage() {
                 {isHost && stream.is_live && (
                   <button
                     type="button"
+                    aria-label="Toggle screen share"
                     onClick={(e) => {
                       e.stopPropagation()
                       toggleScreenShare()
@@ -797,6 +800,7 @@ export default function StreamViewerPage() {
                   {isFullscreen && stream.is_live && (
                     <button
                       type="button"
+                      aria-label="Toggle chat"
                       onClick={(e) => {
                         e.stopPropagation()
                         setChatOpen(prev => !prev)
@@ -817,6 +821,7 @@ export default function StreamViewerPage() {
                   {stream.is_live && (
                     <button
                       type="button"
+                      aria-label="Like stream"
                       onClick={(e) => {
                         e.stopPropagation()
                         if (user) ws.sendLike()
@@ -833,6 +838,7 @@ export default function StreamViewerPage() {
                   {/* Fullscreen toggle */}
                   <button
                     type="button"
+                    aria-label="Toggle fullscreen"
                     onClick={(e) => {
                       e.stopPropagation()
                       toggleFullscreen()

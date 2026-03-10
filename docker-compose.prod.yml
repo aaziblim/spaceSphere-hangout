@@ -92,3 +92,26 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
+  # ---------------------------------------------------------------------------
+  # LiveKit - Production Settings
+  # ---------------------------------------------------------------------------
+  livekit:
+    command: >
+      --bind 0.0.0.0
+      --port 7880
+      --rtc.port-range-start 50000
+      --rtc.port-range-end 50100
+      --rtc.tcp-port 7881
+      --redis-address redis:6379
+      --rtc.use-external-ip
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

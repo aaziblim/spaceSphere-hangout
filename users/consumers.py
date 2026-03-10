@@ -334,7 +334,7 @@ class SpheresConsumer(AsyncWebsocketConsumer):
                 {
                     'type': 'orb_update',
                     'orb': data.get('orb'),
-                    'sender_channel_name': self.channel_name 
+                    'sender_channel_name': self.channel_name
                 }
             )
         elif message_type == 'emote_burst':
@@ -347,6 +347,53 @@ class SpheresConsumer(AsyncWebsocketConsumer):
                     'sender_channel_name': self.channel_name
                 }
             )
+        elif message_type == 'hand_raise':
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    'type': 'hand_raise',
+                    'user_id': self.user.id,
+                    'username': self.user.username,
+                    'raised': data.get('raised', True),
+                }
+            )
+        elif message_type in ('mute_speaker', 'remove_from_room', 'lock_room'):
+            # Moderation — only hosts can do these
+            is_host = await self._is_conductor()
+            if not is_host:
+                return
+            if message_type == 'mute_speaker':
+                await self.channel_layer.group_send(
+                    self.room_group_name,
+                    {
+                        'type': 'force_mute',
+                        'target_user_id': data.get('target_user_id'),
+                    }
+                )
+            elif message_type == 'remove_from_room':
+                await self.channel_layer.group_send(
+                    self.room_group_name,
+                    {
+                        'type': 'user_removed',
+                        'target_user_id': data.get('target_user_id'),
+                        'removed_by': self.user.username,
+                    }
+                )
+            elif message_type == 'lock_room':
+                await self.channel_layer.group_send(
+                    self.room_group_name,
+                    {
+                        'type': 'room_locked',
+                        'locked': data.get('locked', True),
+                    }
+                )
+
+    @database_sync_to_async
+    def _is_conductor(self):
+        from blog.models import CommunityMembership
+        return CommunityMembership.objects.filter(
+            user=self.user, community__slug=self.slug, role__in=('admin', 'moderator')
+        ).exists()
 
     # Handlers
     async def user_joined(self, event):
@@ -378,6 +425,40 @@ class SpheresConsumer(AsyncWebsocketConsumer):
             'type': 'emote_burst',
             'user_id': event['user_id'],
             'emote': event['emote']
+        }))
+
+    async def hand_raise(self, event):
+        await self.send(text_data=json.dumps({
+            'type': 'hand_raise',
+            'user_id': event['user_id'],
+            'username': event['username'],
+            'raised': event['raised'],
+        }))
+
+    async def role_change(self, event):
+        await self.send(text_data=json.dumps({
+            'type': 'role_change',
+            'user_id': event['user_id'],
+            'new_role': event['new_role'],
+        }))
+
+    async def force_mute(self, event):
+        await self.send(text_data=json.dumps({
+            'type': 'force_mute',
+            'target_user_id': event['target_user_id'],
+        }))
+
+    async def user_removed(self, event):
+        await self.send(text_data=json.dumps({
+            'type': 'user_removed',
+            'target_user_id': event['target_user_id'],
+            'removed_by': event['removed_by'],
+        }))
+
+    async def room_locked(self, event):
+        await self.send(text_data=json.dumps({
+            'type': 'room_locked',
+            'locked': event['locked'],
         }))
 
 

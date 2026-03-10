@@ -214,14 +214,14 @@ export default function PostCard({
 
             <div className="p-4 pt-3">
                 <div className="flex items-center gap-0.5 mb-3">
-                    <button onClick={handleLikeClick} className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all hover:scale-105 ${likeAnim ? 'animate-heartBeat' : ''}`} style={{ backgroundColor: post.user_has_liked ? 'var(--accent-alpha)' : 'transparent', color: post.user_has_liked ? 'var(--accent)' : 'var(--text-secondary)', opacity: !isAuthenticated || liking || disliking ? 0.5 : 1 }}>
+                    <button onClick={handleLikeClick} aria-label="Like" className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all hover:scale-105 ${likeAnim ? 'animate-heartBeat' : ''}`} style={{ backgroundColor: post.user_has_liked ? 'var(--accent-alpha)' : 'transparent', color: post.user_has_liked ? 'var(--accent)' : 'var(--text-secondary)', opacity: !isAuthenticated || liking || disliking ? 0.5 : 1 }}>
                         <svg viewBox="0 0 24 24" fill={post.user_has_liked ? "currentColor" : "none"} stroke="currentColor" strokeWidth={1.5} className="w-5 h-5">
                             <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
                         </svg>
                         {post.likes_count > 0 && <span>{post.likes_count}</span>}
                     </button>
 
-                    <button onClick={e => { e.preventDefault(); e.stopPropagation(); if (isAuthenticated && !liking && !disliking) onDislike?.() }} className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all hover:scale-105" style={{ backgroundColor: post.user_has_disliked ? 'var(--bg-tertiary)' : 'transparent', color: post.user_has_disliked ? 'var(--text-primary)' : 'var(--text-tertiary)', opacity: !isAuthenticated || liking || disliking ? 0.5 : 1 }}>
+                    <button onClick={e => { e.preventDefault(); e.stopPropagation(); if (isAuthenticated && !liking && !disliking) onDislike?.() }} aria-label="Dislike" className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all hover:scale-105" style={{ backgroundColor: post.user_has_disliked ? 'var(--bg-tertiary)' : 'transparent', color: post.user_has_disliked ? 'var(--text-primary)' : 'var(--text-tertiary)', opacity: !isAuthenticated || liking || disliking ? 0.5 : 1 }}>
                         <svg viewBox="0 0 24 24" fill={post.user_has_disliked ? "currentColor" : "none"} stroke="currentColor" strokeWidth={1.5} className="w-4 h-4"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17" /></svg>
                         {post.dislikes_count > 0 && <span className="text-xs">{post.dislikes_count}</span>}
                     </button>
@@ -234,6 +234,7 @@ export default function PostCard({
                     <div className="relative">
                         <button
                             onClick={() => isAuthenticated && setShowVibes(!showVibes)}
+                            aria-label="Reactions"
                             className={`flex items-center gap-1.5 px-3 py-2 rounded-xl transition-all hover:scale-105 ${vibeAnim ? 'animate-pop' : ''}`}
                             style={{
                                 backgroundColor: selectedVibe !== null ? `${VIBE_REACTIONS[selectedVibe].color}20` : 'transparent',
@@ -261,6 +262,7 @@ export default function PostCard({
                                     <button
                                         key={vibe.label}
                                         onClick={() => handleVibe(i)}
+                                        aria-label={vibe.label}
                                         className="p-2 rounded-xl hover:scale-125 transition-all"
                                         style={{
                                             backgroundColor: selectedVibe === i ? `${vibe.color}30` : 'transparent',
@@ -277,13 +279,13 @@ export default function PostCard({
 
                     <div className="flex-1" />
 
-                    <button onClick={handleSave} className={`p-2 rounded-xl transition-all hover:scale-105 ${saveAnim ? 'animate-pop' : ''}`} style={{ color: isSaved ? '#F59E0B' : 'var(--text-secondary)' }}>
+                    <button onClick={handleSave} aria-label="Save" className={`p-2 rounded-xl transition-all hover:scale-105 ${saveAnim ? 'animate-pop' : ''}`} style={{ color: isSaved ? '#F59E0B' : 'var(--text-secondary)' }}>
                         <svg viewBox="0 0 24 24" fill={isSaved ? "currentColor" : "none"} stroke="currentColor" strokeWidth={1.5} className="w-5 h-5">
                             <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
                         </svg>
                     </button>
 
-                    <button onClick={handleShare} className="p-2 rounded-xl transition-all hover:scale-105" style={{ color: 'var(--text-secondary)' }}>
+                    <button onClick={handleShare} aria-label="Share" className="p-2 rounded-xl transition-all hover:scale-105" style={{ color: 'var(--text-secondary)' }}>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-5 h-5"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" /><polyline points="16 6 12 2 8 6" /><line x1="12" y1="2" x2="12" y2="15" /></svg>
                         {shareToast && <div className="absolute bottom-full right-0 mb-2 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap bg-gray-800 text-white shadow-xl animate-fade-in">{shareToast}</div>}
                     </button>

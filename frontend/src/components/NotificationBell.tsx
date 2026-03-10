@@ -26,6 +26,8 @@ function notificationText(n: AppNotification): string {
       return `replied to your comment${n.post_title ? ` on "${n.post_title}"` : ''}`
     case 'follow':
       return 'started following you'
+    case 'sphere':
+      return `opened a Sphere${n.post_title ? ` in ${n.post_title}` : ''}`
     default:
       return 'interacted with you'
   }
@@ -33,6 +35,7 @@ function notificationText(n: AppNotification): string {
 
 function notificationLink(n: AppNotification): string {
   if (n.type === 'follow') return `/user/${n.actor.username}`
+  if (n.type === 'sphere' && n.community_slug) return `/c/${n.community_slug}`
   if (n.post_slug) return `/posts/${n.post_slug}`
   return '/'
 }

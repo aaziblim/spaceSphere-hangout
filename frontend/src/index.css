@@ -393,3 +393,24 @@ body {
 .animate-fadeIn {
   animation: fadeIn 0.3s ease-out;
 }
+
+/* Spheres - Slow spin for emote particles */
+@keyframes spin-slow {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin-slow {
+  animation: spin-slow 3s linear infinite;
+}
+
+/* Spheres - Pulsing live indicator */
+@keyframes sphere-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.4); }
+}
+
+.animate-sphere-pulse {
+  animation: sphere-pulse 2s ease-in-out infinite;
+}

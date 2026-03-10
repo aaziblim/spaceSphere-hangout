@@ -228,6 +228,7 @@ function CommentItem({
           <button
             onClick={() => likeMutation.mutate()}
             disabled={!currentUser || likeMutation.isPending}
+            aria-label="Like comment"
             className="flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
             style={{
               backgroundColor: comment.user_has_liked ? 'rgba(239, 68, 108, 0.12)' : 'transparent',
@@ -255,6 +256,7 @@ function CommentItem({
             <button
               onClick={() => { if (confirm('Delete this comment?')) deleteMutation.mutate() }}
               disabled={deleteMutation.isPending}
+              aria-label="Delete comment"
               className="flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium transition-all hover:scale-105 active:scale-95 disabled:opacity-50 ml-auto"
               style={{ color: 'var(--text-tertiary)' }}
             >
@@ -459,6 +461,7 @@ export default function CommentSection({ postId, currentUser }: CommentSectionPr
                   <button
                     type="button"
                     onClick={() => setShowEmojiPicker(prev => !prev)}
+                    aria-label="Toggle emoji picker"
                     className="p-1.5 rounded-lg transition-all"
                     style={{
                       color: showEmojiPicker ? 'var(--accent)' : 'var(--text-tertiary)',

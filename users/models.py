@@ -231,6 +231,7 @@ class Notification(models.Model):
         ('comment', 'Comment'),
         ('follow', 'Follow'),
         ('reply', 'Reply'),
+        ('sphere', 'Sphere'),
     ]
 
     recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
@@ -240,6 +241,7 @@ class Notification(models.Model):
     post_slug = models.CharField(max_length=300, blank=True, default='')
     post_title = models.CharField(max_length=300, blank=True, default='')
     comment_id = models.IntegerField(null=True, blank=True)
+    community_slug = models.CharField(max_length=140, blank=True, default='')
     is_read = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 

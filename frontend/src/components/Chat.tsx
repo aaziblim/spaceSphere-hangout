@@ -305,6 +305,7 @@ export function ChatDrawer({ isOpen, onClose, initialConversation }: ChatDrawerP
                 onClick={closeConversation}
                 className="p-2 -ml-2 rounded-full transition-colors hover:bg-[var(--bg-tertiary)]"
                 style={{ color: 'var(--text-primary)' }}
+                aria-label="Back to conversations"
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-5 h-5">
                   <path d="M19 12H5M12 19l-7-7 7-7" />
@@ -359,6 +360,7 @@ export function ChatDrawer({ isOpen, onClose, initialConversation }: ChatDrawerP
                 onClick={() => setView('list')}
                 className="p-2 -ml-2 rounded-full transition-colors hover:bg-[var(--bg-tertiary)]"
                 style={{ color: 'var(--text-primary)' }}
+                aria-label="Back to conversations"
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-5 h-5">
                   <path d="M19 12H5M12 19l-7-7 7-7" />
@@ -377,6 +379,7 @@ export function ChatDrawer({ isOpen, onClose, initialConversation }: ChatDrawerP
                     onClick={() => setView('requests')}
                     className="relative p-2 rounded-full transition-colors hover:bg-[var(--bg-tertiary)]"
                     style={{ color: 'var(--text-secondary)' }}
+                    aria-label="Message requests"
                   >
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-5 h-5">
                       <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
@@ -395,6 +398,7 @@ export function ChatDrawer({ isOpen, onClose, initialConversation }: ChatDrawerP
                   onClick={handleClose}
                   className="p-2 rounded-full transition-colors hover:bg-[var(--bg-tertiary)]"
                   style={{ color: 'var(--text-secondary)' }}
+                  aria-label="Close messages"
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-5 h-5">
                     <path d="M18 6L6 18M6 6l12 12" />
@@ -706,6 +710,7 @@ export function ChatDrawer({ isOpen, onClose, initialConversation }: ChatDrawerP
                 disabled={!newMessage.trim() || sendMutation.isPending}
                 className="p-2 rounded-full transition-all disabled:opacity-40"
                 style={{ color: 'var(--accent)' }}
+                aria-label="Send message"
               >
                 {sendMutation.isPending ? (
                   <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
