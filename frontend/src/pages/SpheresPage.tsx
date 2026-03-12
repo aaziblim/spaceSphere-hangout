@@ -54,7 +54,7 @@ function GlassProfileCard({ username, onClose }: { username: string, onClose: ()
                 className="w-full max-w-sm bg-black/40 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] p-8 shadow-2xl animate-in fade-in zoom-in-95 duration-300 flex flex-col items-center gap-6 text-center"
                 onClick={stopProp}
             >
-                <div className="w-32 h-32 rounded-full p-1 bg-gradient-to-tr from-[#5856D6] to-pink-500">
+                <div className="w-32 h-32 rounded-full p-1 bg-gradient-to-tr from-[var(--spheres-purple)] to-pink-500">
                     <div className="w-full h-full rounded-full border-4 border-black overflow-hidden bg-zinc-900">
                         {isLoading ? (
                             <div className="w-full h-full bg-white/10 animate-pulse" />
@@ -527,7 +527,7 @@ export default function SpheresPage() {
                         </svg>
                         Requests
                         {pendingRequests.length > 0 && (
-                            <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] flex items-center justify-center text-[10px] font-bold bg-[#5856D6] text-white rounded-full px-1">
+                            <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] flex items-center justify-center text-[10px] font-bold bg-[var(--spheres-purple)] text-white rounded-full px-1">
                                 {pendingRequests.length}
                             </span>
                         )}
@@ -632,7 +632,7 @@ export default function SpheresPage() {
                     <button
                         onClick={toggleMic}
                         aria-label={isMuted ? 'Unmute microphone' : 'Mute microphone'}
-                        className={`w-16 h-16 rounded-full flex items-center justify-center transition-all duration-300 shadow-xl relative ${isMuted ? 'bg-white/5 text-white/50 border border-white/5 hover:bg-white/10' : 'bg-[#5856D6] text-white scale-110 shadow-[0_0_40px_rgba(88,86,214,0.5)] border border-[#7A78FF]'}`}
+                        className={`w-16 h-16 rounded-full flex items-center justify-center transition-all duration-300 shadow-xl relative ${isMuted ? 'bg-white/5 text-white/50 border border-white/5 hover:bg-white/10' : 'bg-[var(--spheres-purple)] text-white scale-110 shadow-[0_0_40px_rgba(88,86,214,0.5)] border border-[#7A78FF]'}`}
                     >
                         {!isMuted && <div className="absolute inset-0 rounded-full border border-white/30 animate-ping opacity-50" />}
                         {isMuted ? (

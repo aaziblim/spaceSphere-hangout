@@ -47,8 +47,8 @@ export default function CreatorDashboardPage() {
           className="rounded-2xl p-8 text-center"
           style={{ backgroundColor: 'var(--bg-primary)', boxShadow: 'var(--card-shadow)' }}
         >
-          <div className="w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(29, 161, 242, 0.1)' }}>
-            <svg viewBox="0 0 24 24" className="w-8 h-8" fill="none" stroke="#1DA1F2" strokeWidth={1.5}>
+          <div className="w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center" style={{ backgroundColor: 'var(--brand-blue-alpha)' }}>
+            <svg viewBox="0 0 24 24" className="w-8 h-8" fill="none" stroke="var(--brand-blue)" strokeWidth={1.5}>
               <path d="M12 15v2m0 0v2m0-2h2m-2 0H9m3-11V5m0 1a7 7 0 1 1 0 14 7 7 0 0 1 0-14z" />
             </svg>
           </div>
@@ -61,7 +61,7 @@ export default function CreatorDashboardPage() {
           <button
             onClick={() => navigate('/get-verified')}
             className="px-6 py-2.5 rounded-full font-medium text-white inline-flex items-center gap-2"
-            style={{ backgroundColor: '#1DA1F2' }}
+            style={{ backgroundColor: 'var(--brand-blue)' }}
           >
             <VerifiedBadge size="sm" className="[&_path]:fill-white" />
             Get Verified

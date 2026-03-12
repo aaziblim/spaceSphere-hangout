@@ -6,6 +6,7 @@ from .models import Post
 from django.views.generic import ListView, DetailView, CreateView, UpdateView, DeleteView
 from django.db.models import Count
 from django import forms
+from .api import get_blocked_user_ids
 
 # Create your views here.
 
@@ -28,8 +29,7 @@ class PostListView(ListView):
 
     def get_queryset(self):
         base_qs = super().get_queryset()
-        # Prefetch relationships and compute reaction counts to avoid N+1 queries.
-        return (
+        qs = (
             base_qs
             .select_related('author', 'author__profile')
             .prefetch_related('likes', 'dislikes')
@@ -38,13 +38,17 @@ class PostListView(ListView):
                 dislikes_count=Count('dislikes', distinct=True),
             )
         )
+        blocked_ids = get_blocked_user_ids(self.request.user)
+        if blocked_ids:
+            qs = qs.exclude(author_id__in=blocked_ids)
+        return qs
     
 
 class PostDetailView(DetailView):
     model = Post
 
     def get_queryset(self):
-        return (
+        qs = (
             super().get_queryset()
             .select_related('author', 'author__profile')
             .prefetch_related('likes', 'dislikes')
@@ -53,6 +57,10 @@ class PostDetailView(DetailView):
                 dislikes_count=Count('dislikes', distinct=True),
             )
         )
+        blocked_ids = get_blocked_user_ids(self.request.user)
+        if blocked_ids:
+            qs = qs.exclude(author_id__in=blocked_ids)
+        return qs
    
     
 

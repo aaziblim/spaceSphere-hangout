@@ -123,7 +123,7 @@ function LiveStreamCard({ stream }: { stream: Livestream }) {
             className="w-10 h-10 rounded-full overflow-hidden shrink-0 ring-2"
             style={{
               backgroundColor: 'var(--bg-tertiary)',
-              '--tw-ring-color': stream.is_live ? '#ef4444' : 'var(--border-light)'
+              '--tw-ring-color': stream.is_live ? 'var(--danger)' : 'var(--border-light)'
             } as React.CSSProperties}
           >
             {stream.host.profile_image ? (
@@ -375,7 +375,7 @@ function GoLiveModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void
                 onClick={() => createMutation.mutate()}
                 disabled={!title.trim() || createMutation.isPending}
                 className="flex-1 py-3 rounded-xl font-medium text-white transition-all disabled:opacity-50"
-                style={{ backgroundColor: '#ef4444' }}
+                style={{ backgroundColor: 'var(--danger)' }}
               >
                 {createMutation.isPending ? 'Creating...' : 'Continue'}
               </button>
@@ -391,11 +391,11 @@ function GoLiveModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void
             <div className="text-center">
               <div
                 className="w-18 h-18 rounded-full mx-auto mb-3 flex items-center justify-center animate-pulse"
-                style={{ backgroundColor: 'rgba(239, 68, 68, 0.15)' }}
+                style={{ backgroundColor: 'var(--danger-alpha)' }}
               >
                 <div
                   className="w-12 h-12 rounded-full flex items-center justify-center"
-                  style={{ backgroundColor: '#ef4444' }}
+                  style={{ backgroundColor: 'var(--danger)' }}
                 >
                   <svg viewBox="0 0 24 24" fill="currentColor" className="w-7 h-7 text-white">
                     <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z" />
@@ -423,7 +423,7 @@ function GoLiveModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void
                 onClick={() => goLiveMutation.mutate()}
                 disabled={goLiveMutation.isPending}
                 className="w-full py-3 rounded-2xl font-semibold text-white text-base sm:text-lg transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
-                style={{ backgroundColor: '#ef4444' }}
+                style={{ backgroundColor: 'var(--danger)' }}
               >
                 {goLiveMutation.isPending ? (
                   <span className="flex items-center justify-center gap-2">
@@ -482,7 +482,7 @@ export default function LivePage() {
             type="button"
             onClick={() => setShowGoLive(true)}
             className="flex items-center gap-2 px-5 py-2.5 rounded-full font-medium text-white transition-all hover:scale-105 active:scale-95"
-            style={{ backgroundColor: '#ef4444' }}
+            style={{ backgroundColor: 'var(--danger)' }}
           >
             <span className="relative flex h-2.5 w-2.5">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
@@ -579,7 +579,7 @@ export default function LivePage() {
               type="button"
               onClick={() => setShowGoLive(true)}
               className="px-6 py-3 rounded-full font-medium text-white transition-all hover:scale-105"
-              style={{ backgroundColor: '#ef4444' }}
+              style={{ backgroundColor: 'var(--danger)' }}
             >
               Start Streaming
             </button>

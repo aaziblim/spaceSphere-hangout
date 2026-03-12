@@ -118,7 +118,7 @@ export default function ExploreCommunitiesPage() {
                             ) : (
                                 <span
                                     className="text-xs font-semibold px-4 py-1.5 rounded-full shrink-0"
-                                    style={{ backgroundColor: 'var(--accent)', color: '#fff' }}
+                                    style={{ backgroundColor: 'var(--accent)', color: 'var(--text-on-accent)' }}
                                 >
                                     Join
                                 </span>

@@ -32,7 +32,7 @@ export function ConfirmationModal({
             />
 
             {/* Modal Card */}
-            <div className="relative w-full max-w-sm bg-[#1c1c1e] rounded-2xl shadow-2xl border border-white/10 overflow-hidden transform transition-all duration-300 animate-in zoom-in-95 slide-in-from-bottom-2">
+            <div className="relative w-full max-w-sm bg-[var(--bg-secondary)] rounded-2xl shadow-2xl border border-white/10 overflow-hidden transform transition-all duration-300 animate-in zoom-in-95 slide-in-from-bottom-2">
                 <div className="p-6 text-center">
                     {/* Icon */}
                     <div className={`mx-auto w-14 h-14 rounded-full flex items-center justify-center mb-5 ${isDestructive ? 'bg-red-500/10 text-red-500' : 'bg-blue-500/10 text-blue-500'}`}>
@@ -63,7 +63,7 @@ export function ConfirmationModal({
                         <button
                             onClick={onConfirm}
                             disabled={isLoading}
-                            className={`flex-1 py-3.5 rounded-xl font-bold text-white transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100 ${isDestructive ? 'bg-red-500 hover:bg-red-600' : 'bg-[#007AFF] hover:bg-[#0062CC]'
+                            className={`flex-1 py-3.5 rounded-xl font-bold text-white transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100 ${isDestructive ? 'bg-red-500 hover:bg-red-600' : 'bg-[var(--action-blue)] hover:bg-[var(--action-blue-hover)]'
                                 }`}
                         >
                             {isLoading ? (

@@ -80,6 +80,15 @@ urlpatterns = [
     # Settings API
     path('api/settings/', users_api.user_settings_view, name='api-user-settings'),
     path('api/auth/delete-account/', users_api.delete_account_view, name='api-delete-account'),
+    # Block / Mute / Report API
+    path('api/users/<str:username>/block/', users_api.block_user_view, name='api-block-user'),
+    path('api/users/<str:username>/unblock/', users_api.unblock_user_view, name='api-unblock-user'),
+    path('api/users/<str:username>/mute/', users_api.mute_user_view, name='api-mute-user'),
+    path('api/users/<str:username>/unmute/', users_api.unmute_user_view, name='api-unmute-user'),
+    path('api/users/<str:username>/relationship/', users_api.relationship_status_view, name='api-relationship-status'),
+    path('api/blocked/', users_api.blocked_users_view, name='api-blocked-users'),
+    path('api/muted/', users_api.muted_users_view, name='api-muted-users'),
+    path('api/report/', users_api.report_content_view, name='api-report-content'),
     # Trending & Views API
     path('api/posts/trending/', trending_posts_view, name='api-trending-posts'),
     path('api/posts/<str:slug>/view/', increment_post_views, name='api-increment-views'),

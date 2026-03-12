@@ -221,7 +221,7 @@ export default function PostDetailPage() {
               disabled={likeMutation.isPending || dislikeMutation.isPending || !user}
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
               style={{ 
-                backgroundColor: post.user_has_liked ? 'rgba(34, 197, 94, 0.12)' : 'transparent',
+                backgroundColor: post.user_has_liked ? 'var(--success-alpha)' : 'transparent',
                 color: post.user_has_liked ? 'var(--success)' : 'var(--text-secondary)' 
               }}
             >
@@ -237,7 +237,7 @@ export default function PostDetailPage() {
               disabled={likeMutation.isPending || dislikeMutation.isPending || !user}
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
               style={{ 
-                backgroundColor: post.user_has_disliked ? 'rgba(239, 68, 68, 0.12)' : 'transparent',
+                backgroundColor: post.user_has_disliked ? 'var(--danger-alpha)' : 'transparent',
                 color: post.user_has_disliked ? 'var(--danger)' : 'var(--text-secondary)' 
               }}
             >
@@ -294,7 +294,7 @@ export default function PostDetailPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
           <div className="w-full max-w-md rounded-2xl p-6 space-y-4" style={{ backgroundColor: 'var(--bg-primary)', boxShadow: 'var(--card-shadow)' }}>
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ backgroundColor: 'var(--danger)', color: '#fff' }}>
+              <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ backgroundColor: 'var(--danger)', color: 'var(--text-on-accent)' }}>
                 !
               </div>
               <div>

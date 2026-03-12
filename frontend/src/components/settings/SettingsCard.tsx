@@ -30,7 +30,7 @@ export default function SettingsCard({
       style={{
         backgroundColor: 'var(--bg-primary)',
         boxShadow: 'var(--card-shadow)',
-        border: danger ? '1px solid rgba(255,59,48,0.3)' : '1px solid var(--border-light)',
+        border: danger ? '1px solid var(--danger-alpha)' : '1px solid var(--border-light)',
       }}
     >
       <div className="px-5 pt-5 pb-1 sm:px-6 sm:pt-6">
@@ -54,7 +54,7 @@ export default function SettingsCard({
           className="px-5 py-3.5 sm:px-6 flex items-center justify-between gap-3"
           style={{
             borderTop: '1px solid var(--border-light)',
-            backgroundColor: isDirty ? (danger ? 'rgba(255,59,48,0.03)' : 'var(--accent-alpha)') : undefined,
+            backgroundColor: isDirty ? (danger ? 'var(--danger-alpha)' : 'var(--accent-alpha)') : undefined,
           }}
         >
           {isDirty ? (

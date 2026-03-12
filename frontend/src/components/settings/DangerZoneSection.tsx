@@ -48,7 +48,7 @@ export default function DangerZoneSection() {
       >
         <div
           className="flex items-center justify-between py-4 px-4 rounded-xl"
-          style={{ backgroundColor: 'rgba(255,59,48,0.05)' }}
+          style={{ backgroundColor: 'var(--danger-alpha)' }}
         >
           <div>
             <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>

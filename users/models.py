@@ -297,3 +297,73 @@ class UserSettings(models.Model):
         return f"{self.user.username}'s settings"
 
 
+class Block(models.Model):
+    """User A blocks User B — B cannot see A's content or interact."""
+    blocker = models.ForeignKey(User, on_delete=models.CASCADE, related_name='blocking')
+    blocked = models.ForeignKey(User, on_delete=models.CASCADE, related_name='blocked_by')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('blocker', 'blocked')
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.blocker.username} blocked {self.blocked.username}'
+
+
+class Mute(models.Model):
+    """User A mutes User B — B's content is hidden from A's feeds."""
+    muter = models.ForeignKey(User, on_delete=models.CASCADE, related_name='muting')
+    muted = models.ForeignKey(User, on_delete=models.CASCADE, related_name='muted_by')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('muter', 'muted')
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.muter.username} muted {self.muted.username}'
+
+
+class Report(models.Model):
+    """User reports content (user, post, or comment) for moderation."""
+    REASON_CHOICES = [
+        ('spam', 'Spam'),
+        ('harassment', 'Harassment or bullying'),
+        ('hate_speech', 'Hate speech'),
+        ('violence', 'Violence or threats'),
+        ('nudity', 'Nudity or sexual content'),
+        ('misinformation', 'Misinformation'),
+        ('impersonation', 'Impersonation'),
+        ('other', 'Other'),
+    ]
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('reviewed', 'Reviewed'),
+        ('resolved', 'Resolved'),
+        ('dismissed', 'Dismissed'),
+    ]
+    CONTENT_TYPE_CHOICES = [
+        ('user', 'User'),
+        ('post', 'Post'),
+        ('comment', 'Comment'),
+    ]
+
+    reporter = models.ForeignKey(User, on_delete=models.CASCADE, related_name='reports_filed')
+    content_type = models.CharField(max_length=10, choices=CONTENT_TYPE_CHOICES)
+    # Exactly one of these should be set, depending on content_type
+    reported_user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True, related_name='reports_received')
+    reported_post = models.ForeignKey('blog.Post', on_delete=models.CASCADE, null=True, blank=True, related_name='reports')
+    reported_comment = models.ForeignKey('blog.Comment', on_delete=models.CASCADE, null=True, blank=True, related_name='reports')
+    reason = models.CharField(max_length=20, choices=REASON_CHOICES)
+    description = models.TextField(blank=True, default='')
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
+    created_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        target = self.reported_user or self.reported_post or self.reported_comment
+        return f'Report by {self.reporter.username}: {self.content_type} ({target}) - {self.reason}'

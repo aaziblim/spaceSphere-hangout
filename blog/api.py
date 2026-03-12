@@ -12,6 +12,16 @@ from django.utils import timezone
 from django.core.cache import cache
 from django.utils.text import slugify
 import math
+from users.models import Block
+
+
+def get_blocked_user_ids(user):
+    """Return set of user IDs that the given user has blocked OR been blocked by."""
+    if not user or not user.is_authenticated:
+        return set()
+    blocked = set(Block.objects.filter(blocker=user).values_list('blocked_id', flat=True))
+    blocked_by = set(Block.objects.filter(blocked=user).values_list('blocker_id', flat=True))
+    return blocked | blocked_by
 from drf_spectacular.utils import extend_schema, inline_serializer, OpenApiParameter
 from typing import Optional, List
 
@@ -192,6 +202,11 @@ class PostViewSet(viewsets.ModelViewSet):
             )
             .order_by("-date_posted")
         )
+        
+        # Exclude posts from blocked users (bidirectional)
+        blocked_ids = get_blocked_user_ids(self.request.user)
+        if blocked_ids:
+            queryset = queryset.exclude(author_id__in=blocked_ids)
         
         community_slug = self.request.query_params.get('community')
         if community_slug:
@@ -426,8 +441,14 @@ def trending_posts_view(request):
             comments_count=Count('comments', distinct=True),
             trending_score=score,
         )
-        .order_by('-trending_score', '-date_posted')[:limit]
     )
+
+    # Exclude posts from blocked users
+    blocked_ids = get_blocked_user_ids(request.user)
+    if blocked_ids:
+        posts = posts.exclude(author_id__in=blocked_ids)
+
+    posts = posts.order_by('-trending_score', '-date_posted')[:limit]
 
     serializer = PostSerializer(posts, many=True, context={'request': request})
     payload = {
@@ -522,6 +543,10 @@ class CommentSerializer(serializers.ModelSerializer):
             )
             .order_by("created_at")
         )
+        request = self.context.get("request")
+        blocked_ids = get_blocked_user_ids(getattr(request, "user", None))
+        if blocked_ids:
+            replies = replies.exclude(author_id__in=blocked_ids)
         return CommentSerializer(replies, many=True, context=self.context).data
 
 
@@ -541,6 +566,11 @@ class CommentViewSet(viewsets.ModelViewSet):
                 replies_count=Count("replies", distinct=True),
             )
         )
+        
+        # Exclude comments from blocked users (bidirectional)
+        blocked_ids = get_blocked_user_ids(self.request.user)
+        if blocked_ids:
+            queryset = queryset.exclude(author_id__in=blocked_ids)
         
         # Filter by post if specified
         post_id = self.request.query_params.get("post")

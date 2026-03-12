@@ -24,7 +24,7 @@ export default function EmailVerificationBanner() {
   return (
     <div
       className="mb-4 px-4 py-3 rounded-xl text-sm flex items-center justify-between gap-3"
-      style={{ backgroundColor: 'rgba(255, 159, 10, 0.1)', color: '#f59e0b' }}
+      style={{ backgroundColor: 'var(--warning-alpha)', color: 'var(--warning)' }}
     >
       <p>
         Please verify your email address. Check your inbox for a verification link.
@@ -33,7 +33,7 @@ export default function EmailVerificationBanner() {
         onClick={handleResend}
         disabled={sending || resent}
         className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all hover:opacity-80 disabled:opacity-50"
-        style={{ backgroundColor: '#f59e0b', color: '#fff' }}
+        style={{ backgroundColor: 'var(--warning)', color: 'var(--text-on-accent)' }}
       >
         {resent ? 'Sent!' : sending ? 'Sending...' : 'Resend'}
       </button>

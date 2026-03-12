@@ -48,7 +48,7 @@ export default function ResetPasswordConfirmPage() {
   if (status === 'success') {
     return (
       <div className="max-w-md mx-auto py-16 px-4 text-center">
-        <div className="w-16 h-16 mx-auto mb-6 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(52, 199, 89, 0.1)', color: '#34c759' }}>
+        <div className="w-16 h-16 mx-auto mb-6 rounded-full flex items-center justify-center" style={{ backgroundColor: 'var(--success-alpha)', color: 'var(--success)' }}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-8 h-8">
             <polyline points="20 6 9 17 4 12" />
           </svg>
@@ -65,7 +65,7 @@ export default function ResetPasswordConfirmPage() {
       <p className="text-sm mb-8" style={{ color: 'var(--text-secondary)' }}>Choose a strong password for your account.</p>
 
       {errors.length > 0 && (
-        <div className="p-4 rounded-xl mb-6 text-sm" style={{ backgroundColor: 'rgba(255, 59, 48, 0.1)', color: '#ff3b30' }}>
+        <div className="p-4 rounded-xl mb-6 text-sm" style={{ backgroundColor: 'var(--danger-alpha)', color: 'var(--danger)' }}>
           {errors.map((err, i) => <p key={i}>{err}</p>)}
         </div>
       )}

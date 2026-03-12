@@ -80,11 +80,11 @@ export default function AccountSection() {
             </>
           ) : (
             <>
-              <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5" style={{ color: '#f59e0b' }}>
+              <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5" style={{ color: 'var(--warning)' }}>
                 <path d="M12 9v2m0 4h.01" stroke="currentColor" strokeWidth={2} strokeLinecap="round" />
                 <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth={2} />
               </svg>
-              <span className="text-sm font-medium" style={{ color: '#f59e0b' }}>
+              <span className="text-sm font-medium" style={{ color: 'var(--warning)' }}>
                 Email not verified
               </span>
             </>
@@ -108,7 +108,7 @@ export default function AccountSection() {
       )}
 
       {isDirty && (
-        <p className="text-xs mt-3" style={{ color: '#f59e0b' }}>
+        <p className="text-xs mt-3" style={{ color: 'var(--warning)' }}>
           Changing your email will require re-verification.
         </p>
       )}

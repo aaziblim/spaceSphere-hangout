@@ -6,9 +6,9 @@ import api, { fetchCsrf } from '../api'
 
 // Pricing tiers
 const TIERS = {
-    basic: { name: 'Blue', price: 8, annual: 80, color: '#1DA1F2' },
-    premium: { name: 'Premium', price: 16, annual: 160, color: '#1DA1F2' },
-    organization: { name: 'Organization', price: 200, annual: 2000, color: '#F59E0B' },
+    basic: { name: 'Blue', price: 8, annual: 80, color: 'var(--brand-blue)' },
+    premium: { name: 'Premium', price: 16, annual: 160, color: 'var(--brand-blue)' },
+    organization: { name: 'Organization', price: 200, annual: 2000, color: 'var(--warning)' },
 }
 
 // Paystack Public Key (TEST MODE)
@@ -160,7 +160,7 @@ export default function CheckoutPage() {
                     {/* Header */}
                     <div
                         className="p-6 text-center text-white"
-                        style={{ background: `linear-gradient(135deg, ${tierInfo.color} 0%, ${tier === 'organization' ? '#D97706' : '#0A84FF'} 100%)` }}
+                        style={{ background: `linear-gradient(135deg, ${tierInfo.color} 0%, ${tier === 'organization' ? 'var(--warning)' : 'var(--action-blue)'} 100%)` }}
                     >
                         <VerifiedBadge size="lg" className="mx-auto mb-3 [&_path]:fill-white" />
                         <h1 className="text-2xl font-bold mb-1">{tierInfo.name}</h1>
@@ -184,7 +184,7 @@ export default function CheckoutPage() {
 
                     {/* Error */}
                     {error && (
-                        <div className="mx-6 mt-6 p-4 rounded-xl text-sm text-center" style={{ backgroundColor: 'rgba(239,68,68,0.1)', color: '#EF4444' }}>
+                        <div className="mx-6 mt-6 p-4 rounded-xl text-sm text-center" style={{ backgroundColor: 'var(--danger-alpha)', color: 'var(--danger)' }}>
                             {error}
                         </div>
                     )}
@@ -278,7 +278,7 @@ export default function CheckoutPage() {
                                             <button
                                                 key={p.id}
                                                 onClick={() => setMomoProvider(p.id)}
-                                                className={`p-3 rounded-xl text-center transition-all ${momoProvider === p.id ? 'ring-2 ring-[#1DA1F2]' : ''}`}
+                                                className={`p-3 rounded-xl text-center transition-all ${momoProvider === p.id ? 'ring-2 ring-[var(--brand-blue)]' : ''}`}
                                                 style={{ backgroundColor: 'var(--bg-tertiary)' }}
                                             >
                                                 <div className="w-8 h-8 rounded-full mx-auto mb-2" style={{ backgroundColor: p.color }} />
@@ -309,7 +309,7 @@ export default function CheckoutPage() {
                                 onClick={handlePayment}
                                 disabled={isProcessing || (paymentMethod === 'momo' && phone.length < 10)}
                                 className="w-full py-4 rounded-full font-semibold text-white text-lg transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-50"
-                                style={{ background: `linear-gradient(135deg, ${tierInfo.color} 0%, ${tier === 'organization' ? '#D97706' : '#0A84FF'} 100%)` }}
+                                style={{ background: `linear-gradient(135deg, ${tierInfo.color} 0%, ${tier === 'organization' ? 'var(--warning)' : 'var(--action-blue)'} 100%)` }}
                             >
                                 {isProcessing ? (
                                     <span className="flex items-center justify-center gap-3">

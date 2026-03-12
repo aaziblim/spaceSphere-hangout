@@ -16,6 +16,7 @@ Spherespace is a real-time social platform for creators and communities. It comb
 | Live Streaming | WebSocket chat, screen sharing, viewer moderation, stream categories, post-stream summary |
 | Audio Spaces | Real-time spatial audio rooms with physics-based orbs, Conductor role, guest approval, and emote bursts |
 | Payments | Paystack integration, subscription tiers (Blue, Premium, Organization), webhooks |
+| Moderation | Block users, mute users, report posts/comments/users with email notification to admins |
 | UI/UX | Dark/light/system themes, skeleton loading, micro-interactions, custom 404 page |
 
 ## Screenshots
@@ -82,8 +83,8 @@ my_project/
 │   ├── urls.py
 │   └── asgi.py          # Channels/WebSocket routing
 ├── users/               # User management
-│   ├── models.py        # Profile, Follow, Conversation, DirectMessage, UserAchievement, UserSettings
-│   ├── api.py           # REST endpoints (auth, profiles, settings, notifications)
+│   ├── models.py        # Profile, Follow, Block, Mute, Report, Conversation, DirectMessage, UserAchievement, UserSettings
+│   ├── api.py           # REST endpoints (auth, profiles, settings, notifications, block/mute/report)
 │   ├── consumers.py     # WebSocket consumers (chat, notifications, spheres)
 │   └── signals.py       # Auto-create Profile and UserSettings on registration
 ├── blog/                # Content management
@@ -95,8 +96,8 @@ my_project/
 │   └── api.py           # Payment flows, subscriptions, webhooks
 └── frontend/            # React application
     ├── src/
-    │   ├── components/       # UI components (Chat, Navbar, PostCard, etc.)
-    │   ├── components/settings/ # Settings page sections (profile, privacy, security, etc.)
+    │   ├── components/       # UI components (Chat, Navbar, PostCard, UserActionMenu, ReportModal, etc.)
+    │   ├── components/settings/ # Settings page sections (profile, privacy, security, blocked/muted, etc.)
     │   ├── pages/            # Page components (Home, Explore, Settings, etc.)
     │   ├── hooks/            # Custom hooks (chat WS, livestream WS, notifications WS)
     │   ├── ThemeContext.tsx   # Theme provider (light, dark, system)
@@ -435,6 +436,16 @@ GET  /api/payments/verify/{ref}/
 GET  /api/payments/subscription/
 POST /api/payments/cancel/
 
+# Moderation
+POST /api/users/block/{username}/         # Block a user
+DELETE /api/users/unblock/{username}/     # Unblock a user
+POST /api/users/mute/{username}/          # Mute a user
+DELETE /api/users/unmute/{username}/      # Unmute a user
+GET  /api/users/blocked/                  # List blocked users
+GET  /api/users/muted/                    # List muted users
+GET  /api/users/relationship/{username}/  # Block/mute status with a user
+POST /api/users/report/                   # Report a post, comment, or user
+
 # Spheres (Audio Spaces)
 GET  /api/spheres/{slug}/status/       # Check if sphere is live
 POST /api/spheres/{slug}/create/       # Start a sphere (admin/mod)
@@ -492,6 +503,9 @@ DEFAULT_FROM_EMAIL=your@gmail.com
 # Admin access
 ADMIN_IP_RESTRICT=True
 ADMIN_ALLOWED_IPS=127.0.0.1,::1
+
+# Moderation — email address that receives report notifications
+REPORT_NOTIFY_EMAIL=admin@yoursite.com
 ```
 
 ---
@@ -544,6 +558,7 @@ A comprehensive, standalone settings page with sidebar navigation (desktop) and 
 - **Notifications** — Per-type toggles (likes, comments, follows, replies) and email notifications
 - **Privacy** — Profile visibility, online status, messaging permissions
 - **Security** — Inline password change
+- **Blocked & Muted** — Manage blocked and muted users with one-click unblock/unmute
 - **Danger Zone** — Account deletion with password confirmation
 
 ### Chat Drawer
@@ -556,8 +571,32 @@ A comprehensive, standalone settings page with sidebar navigation (desktop) and 
 - **Save button**: Pop bounce animation
 - **Emoji reactions**: Colored tint + label display
 
+### Design Token System
+All hardcoded hex colors replaced with CSS custom properties for consistent light/dark theming:
+
+| Token | Purpose |
+|-------|---------|
+| `--danger` / `--danger-alpha` | Error states, destructive actions, live indicators |
+| `--success` / `--success-alpha` | Confirmation, like reactions |
+| `--warning` / `--warning-alpha` | Caution states, Organisation tier, saved posts |
+| `--brand-blue` / `--brand-blue-alpha` | Verification badges, Blue/Premium tiers |
+| `--action-blue` / `--action-blue-hover` | Primary CTA buttons |
+| `--gradient-community` | Community page gradients |
+| `--gradient-stream` | Livestream page gradients |
+| `--gradient-verified` | Get Verified page gradients |
+| `--spheres-purple` | Spheres page accent color |
+| `--text-on-accent` | White text on colored backgrounds |
+
 ### Skeleton Loading
 Shimmer loading states across all pages for a polished experience.
+
+### Post Composer
+The create/edit post UI was redesigned as a full-page composer:
+- Borderless, distraction-free title and content fields (large bold title, relaxed-line textarea)
+- Inline media preview above the text when a photo or video is attached — with a frosted-glass remove button
+- Bottom toolbar with **Photo** and **Video** upload buttons and a live character counter
+- Top bar with a **Back** button and a context-aware **Publish / Save** button (disabled + muted until title and content are filled)
+- Animated spinner inside the Publish button while saving
 
 ### Theme Support
 - Dark mode
@@ -574,6 +613,14 @@ Shimmer loading states across all pages for a polished experience.
 - Premium transparent overlays for stream controls
 - Confirmation dialogs for critical actions (end stream, delete)
 
+### Moderation System
+- **Three-dot action menu** (`UserActionMenu`) on every post, comment, and profile — portal-rendered to avoid clipping by parent overflow constraints
+- **Block** — hides a user's posts and comments site-wide; prevents direct messaging between blocked parties
+- **Mute** — silences a user's content in feeds without notifying them
+- **Report** — 8 reason categories (spam, harassment, misinformation, hate speech, nudity, violence, copyright, other) plus an optional description field; submits a `Report` record and emails `REPORT_NOTIFY_EMAIL` with full context and a direct Django admin link
+- **Blocked & Muted settings** — dedicated section in Settings for reviewing and removing blocks/mutes
+- **Admin panel** — `BlockAdmin`, `MuteAdmin`, and `ReportAdmin` with bulk-action workflows (`mark_reviewed`, `mark_resolved`, `mark_dismissed`)
+
 ### Audio Spaces (Spheres)
 - **Conductor role** — renamed from "host" to match the cosmic theme
 - **Smart sphere button** on community pages — context-aware: Start (admin/mod), Join (member), Request to Join (guest)
@@ -588,6 +635,7 @@ Shimmer loading states across all pages for a polished experience.
 - [x] Sphere creation flow with conductor role
 - [x] Guest request-to-join approval system
 - [x] Sphere lifecycle management (create, join, leave, end)
+- [x] Block, mute, and report system with admin email notifications
 - [ ] Push notifications
 - [ ] Voice/video calling
 - [ ] Stories feature

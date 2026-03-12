@@ -522,8 +522,8 @@ function LiveActivity() {
         </p>
         {displayStreams.length > 0 && (
           <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ backgroundColor: '#FF3B30' }} />
-            <span className="relative inline-flex rounded-full h-2 w-2" style={{ backgroundColor: '#FF3B30' }} />
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ backgroundColor: 'var(--danger)' }} />
+            <span className="relative inline-flex rounded-full h-2 w-2" style={{ backgroundColor: 'var(--danger)' }} />
           </span>
         )}
       </div>
@@ -545,9 +545,9 @@ function LiveActivity() {
                   src={stream.host.profile_image || '/default-avatar.png'}
                   alt={stream.host.username}
                   className="w-9 h-9 rounded-full object-cover"
-                  style={{ border: '2px solid #FF3B30' }}
+                  style={{ border: '2px solid var(--danger)' }}
                 />
-                <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2" style={{ backgroundColor: '#FF3B30', borderColor: 'var(--bg-primary)' }} />
+                <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2" style={{ backgroundColor: 'var(--danger)', borderColor: 'var(--bg-primary)' }} />
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-medium truncate" style={{ color: 'var(--text-primary)' }}>

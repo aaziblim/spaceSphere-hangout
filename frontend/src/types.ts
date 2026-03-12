@@ -209,3 +209,34 @@ export interface SphereJoinRequestItem {
   profile_image: string | null
   created_at: string
 }
+
+// ============ BLOCK / MUTE / REPORT ============
+
+export interface RelationshipStatus {
+  is_blocked: boolean
+  is_muted: boolean
+  is_blocked_by: boolean
+}
+
+export interface BlockedUser {
+  id: number
+  username: string
+  profile_image: string | null
+  blocked_at: string
+}
+
+export interface MutedUser {
+  id: number
+  username: string
+  profile_image: string | null
+  muted_at: string
+}
+
+export interface ReportPayload {
+  content_type: 'user' | 'post' | 'comment'
+  reason: 'spam' | 'harassment' | 'hate_speech' | 'violence' | 'nudity' | 'misinformation' | 'impersonation' | 'other'
+  description?: string
+  username?: string
+  post_id?: number
+  comment_id?: number
+}

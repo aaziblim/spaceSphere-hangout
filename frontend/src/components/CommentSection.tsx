@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { fetchComments, createComment, deleteComment, likeComment, dislikeComment } from '../api'
+import UserActionMenu from './UserActionMenu'
 import type { Comment, User } from '../types'
 
 function timeAgo(dateString: string): string {
@@ -213,6 +214,14 @@ function CommentItem({
               You
             </span>
           )}
+          <div className="ml-auto">
+            <UserActionMenu
+              username={comment.author.username}
+              currentUsername={currentUser?.username}
+              contentType="comment"
+              targetId={{ comment_id: comment.id }}
+            />
+          </div>
         </div>
 
         {/* Comment text */}
@@ -231,8 +240,8 @@ function CommentItem({
             aria-label="Like comment"
             className="flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
             style={{
-              backgroundColor: comment.user_has_liked ? 'rgba(239, 68, 108, 0.12)' : 'transparent',
-              color: comment.user_has_liked ? '#EF446C' : 'var(--text-tertiary)'
+              backgroundColor: comment.user_has_liked ? 'var(--danger-alpha)' : 'transparent',
+              color: comment.user_has_liked ? 'var(--danger)' : 'var(--text-tertiary)'
             }}
           >
             <HeartIcon filled={comment.user_has_liked} animating={likeAnimating} />
@@ -372,7 +381,7 @@ export default function CommentSection({ postId, currentUser }: CommentSectionPr
       <div className="text-center py-12">
         <div
           className="w-14 h-14 mx-auto mb-4 rounded-full flex items-center justify-center"
-          style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)' }}
+          style={{ backgroundColor: 'var(--danger-alpha)' }}
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-7 h-7" style={{ color: 'var(--danger)' }}>
             <circle cx="12" cy="12" r="10" />

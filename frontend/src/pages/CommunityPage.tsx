@@ -159,7 +159,7 @@ export default function CommunityPage() {
                                                 onClick={() => joinMutation.mutate()}
                                                 disabled={joinMutation.isPending}
                                                 className="px-5 py-2 text-sm font-medium rounded-full transition-all hover:opacity-90 active:scale-95 disabled:opacity-50"
-                                                style={{ backgroundColor: 'var(--accent)', color: '#fff' }}
+                                                style={{ backgroundColor: 'var(--accent)', color: 'var(--text-on-accent)' }}
                                             >
                                                 Join
                                             </button>
@@ -187,7 +187,7 @@ export default function CommunityPage() {
                                     onClick={() => joinMutation.mutate()}
                                     disabled={joinMutation.isPending}
                                     className="flex-1 py-2.5 text-sm font-semibold rounded-xl transition-all active:scale-[0.98] disabled:opacity-50"
-                                    style={{ backgroundColor: 'var(--accent)', color: '#fff' }}
+                                    style={{ backgroundColor: 'var(--accent)', color: 'var(--text-on-accent)' }}
                                 >
                                     Join
                                 </button>
@@ -245,9 +245,9 @@ export default function CommunityPage() {
                                 <div className="relative">
                                     <div
                                         className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-                                        style={{ background: 'linear-gradient(135deg, #4f46e5, #9333ea)' }}
+                                        style={{ background: 'var(--gradient-community)' }}
                                     >
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2} className="w-5 h-5">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="var(--text-on-accent)" strokeWidth={2} className="w-5 h-5">
                                             <circle cx="12" cy="12" r="10" />
                                             <circle cx="12" cy="12" r="4" />
                                         </svg>
@@ -284,9 +284,9 @@ export default function CommunityPage() {
                                 <div className="relative">
                                     <div
                                         className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-                                        style={{ background: 'linear-gradient(135deg, #4f46e5, #9333ea)' }}
+                                        style={{ background: 'var(--gradient-community)' }}
                                     >
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2} className="w-5 h-5">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="var(--text-on-accent)" strokeWidth={2} className="w-5 h-5">
                                             <circle cx="12" cy="12" r="10" />
                                             <circle cx="12" cy="12" r="4" />
                                         </svg>
@@ -306,7 +306,7 @@ export default function CommunityPage() {
                                         className="px-4 py-2 text-xs font-semibold rounded-full transition-all active:scale-95 disabled:opacity-60"
                                         style={requestSent
                                             ? { backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-tertiary)' }
-                                            : { backgroundColor: 'var(--accent)', color: '#fff' }
+                                            : { backgroundColor: 'var(--accent)', color: 'var(--text-on-accent)' }
                                         }
                                     >
                                         {requestSent ? 'Request Sent' : 'Request to Join'}
@@ -326,9 +326,9 @@ export default function CommunityPage() {
                             >
                                 <div
                                     className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-                                    style={{ background: 'linear-gradient(135deg, #4f46e5, #9333ea)' }}
+                                    style={{ background: 'var(--gradient-community)' }}
                                 >
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2} className="w-5 h-5">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="var(--text-on-accent)" strokeWidth={2} className="w-5 h-5">
                                         <circle cx="12" cy="12" r="10" />
                                         <circle cx="12" cy="12" r="4" />
                                     </svg>
@@ -385,9 +385,9 @@ export default function CommunityPage() {
                         <div className="flex items-center gap-3 mb-5">
                             <div
                                 className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-                                style={{ background: 'linear-gradient(135deg, #4f46e5, #9333ea)' }}
+                                style={{ background: 'var(--gradient-community)' }}
                             >
-                                <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2} className="w-5 h-5">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="var(--text-on-accent)" strokeWidth={2} className="w-5 h-5">
                                     <circle cx="12" cy="12" r="10" />
                                     <circle cx="12" cy="12" r="4" />
                                 </svg>
@@ -426,7 +426,7 @@ export default function CommunityPage() {
                                 onClick={() => createSphereMutation.mutate()}
                                 disabled={createSphereMutation.isPending}
                                 className="flex-1 py-2.5 text-sm font-semibold rounded-xl transition-all active:scale-[0.98] disabled:opacity-60"
-                                style={{ background: 'linear-gradient(135deg, #4f46e5, #9333ea)', color: '#fff' }}
+                                style={{ background: 'var(--gradient-community)', color: 'var(--text-on-accent)' }}
                             >
                                 {createSphereMutation.isPending ? 'Starting...' : 'Go Live'}
                             </button>

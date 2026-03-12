@@ -49,7 +49,7 @@ export default function CreateCommunityPage() {
 
             <form onSubmit={handleSubmit} className="space-y-8 p-8 rounded-[3rem]" style={{ backgroundColor: 'var(--bg-primary)', boxShadow: 'var(--card-shadow)', border: '1px solid var(--border-light)' }}>
                 {error && (
-                    <div className="p-4 rounded-2xl text-sm font-medium border" style={{ backgroundColor: 'rgba(255, 59, 48, 0.1)', color: 'var(--danger)', borderColor: 'rgba(255, 59, 48, 0.2)' }}>
+                    <div className="p-4 rounded-2xl text-sm font-medium border" style={{ backgroundColor: 'var(--danger-alpha)', color: 'var(--danger)', borderColor: 'var(--danger-alpha)' }}>
                         {error}
                     </div>
                 )}

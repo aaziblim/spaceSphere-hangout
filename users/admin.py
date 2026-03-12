@@ -4,6 +4,7 @@ from django.contrib.auth.models import User
 from .models import (
     Profile, Follow, Conversation, DirectMessage,
     UserActivity, UserPublicKey, UserAchievement, UserSettings,
+    Block, Mute, Report,
 )
 
 
@@ -134,3 +135,44 @@ class UserAchievementAdmin(admin.ModelAdmin):
 class UserSettingsAdmin(admin.ModelAdmin):
     list_display = ('user', 'profile_visibility', 'show_online_status', 'email_notifications')
     list_filter = ('profile_visibility', 'email_notifications')
+
+
+@admin.register(Block)
+class BlockAdmin(admin.ModelAdmin):
+    list_display = ('blocker', 'blocked', 'created_at')
+    search_fields = ('blocker__username', 'blocked__username')
+    readonly_fields = ('created_at',)
+    autocomplete_fields = ('blocker', 'blocked')
+    list_per_page = 50
+
+
+@admin.register(Mute)
+class MuteAdmin(admin.ModelAdmin):
+    list_display = ('muter', 'muted', 'created_at')
+    search_fields = ('muter__username', 'muted__username')
+    readonly_fields = ('created_at',)
+    autocomplete_fields = ('muter', 'muted')
+    list_per_page = 50
+
+
+@admin.register(Report)
+class ReportAdmin(admin.ModelAdmin):
+    list_display = ('reporter', 'content_type', 'reason', 'status', 'created_at')
+    list_filter = ('content_type', 'reason', 'status', 'created_at')
+    search_fields = ('reporter__username', 'description')
+    readonly_fields = ('reporter', 'content_type', 'reported_user', 'reported_post', 'reported_comment', 'reason', 'description', 'created_at')
+    list_per_page = 50
+    actions = ['mark_reviewed', 'mark_resolved', 'mark_dismissed']
+
+    @admin.action(description='Mark selected reports as reviewed')
+    def mark_reviewed(self, request, queryset):
+        queryset.update(status='reviewed')
+
+    @admin.action(description='Mark selected reports as resolved')
+    def mark_resolved(self, request, queryset):
+        from django.utils import timezone
+        queryset.update(status='resolved', resolved_at=timezone.now())
+
+    @admin.action(description='Dismiss selected reports')
+    def mark_dismissed(self, request, queryset):
+        queryset.update(status='dismissed')

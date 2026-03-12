@@ -849,7 +849,7 @@ export function MessageButton({ targetUser, isFollowing, onOpenChat }: MessageBu
               <div className="text-center py-4">
                 <div
                   className="w-14 h-14 mx-auto mb-3 rounded-full flex items-center justify-center"
-                  style={{ backgroundColor: 'rgba(52, 199, 89, 0.15)' }}
+                  style={{ backgroundColor: 'var(--success-alpha)' }}
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-7 h-7" style={{ color: 'var(--success)' }}>
                     <path d="M20 6L9 17l-5-5" />

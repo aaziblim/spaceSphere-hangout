@@ -6,7 +6,7 @@ from rest_framework.decorators import api_view, permission_classes, throttle_cla
 from rest_framework.response import Response
 from rest_framework import serializers
 from rest_framework.throttling import ScopedRateThrottle
-from users.models import Profile, Follow, UserPublicKey, UserSettings
+from users.models import Profile, Follow, UserPublicKey, UserSettings, Block, Mute, Report
 from django.db.models import Count, Q
 from drf_spectacular.utils import (
     extend_schema,
@@ -300,7 +300,18 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
     def get_posts(self, obj) -> List[dict]:
         from blog.api import PostSerializer
-        posts = obj.post_set.order_by('-date_posted')[:12]
+        from django.db.models import Count
+        posts = (
+            obj.post_set
+            .select_related('author', 'author__profile', 'community')
+            .prefetch_related('likes', 'dislikes')
+            .annotate(
+                likes_count=Count('likes', distinct=True),
+                dislikes_count=Count('dislikes', distinct=True),
+                comments_count=Count('comments', distinct=True),
+            )
+            .order_by('-date_posted')[:12]
+        )
         return PostSerializer(posts, many=True, context=self.context).data
 
 
@@ -323,6 +334,15 @@ def user_profile_view(request, username):
         user = User.objects.select_related('profile').get(username=username)
     except User.DoesNotExist:
         return Response({'detail': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
+    
+    # If the viewing user has blocked or been blocked by this user, deny access
+    if request.user.is_authenticated and request.user != user:
+        is_blocked = Block.objects.filter(
+            Q(blocker=request.user, blocked=user) |
+            Q(blocker=user, blocked=request.user)
+        ).exists()
+        if is_blocked:
+            return Response({'detail': 'This user is not available.', 'is_blocked': True}, status=status.HTTP_403_FORBIDDEN)
     
     serializer = UserProfileSerializer(user, context={'request': request})
     data = serializer.data
@@ -454,7 +474,10 @@ def suggested_users_view(request):
     if request.user.is_authenticated:
         # Exclude current user and users already followed
         following_ids = Follow.objects.filter(follower=request.user).values_list('following_id', flat=True)
-        users = users.exclude(id=request.user.id).exclude(id__in=following_ids)
+        blocked_ids = set(Block.objects.filter(blocker=request.user).values_list('blocked_id', flat=True))
+        blocked_by_ids = set(Block.objects.filter(blocked=request.user).values_list('blocker_id', flat=True))
+        exclude_ids = {request.user.id} | set(following_ids) | blocked_ids | blocked_by_ids
+        users = users.exclude(id__in=exclude_ids)
     
     users = users[:5]  # Limit to 5 suggestions
     
@@ -514,8 +537,10 @@ def explore_users_view(request):
     ).order_by('-follower_count')
     
     if request.user.is_authenticated:
-        # Exclude current user
-        users = users.exclude(id=request.user.id)
+        blocked_ids = set(Block.objects.filter(blocker=request.user).values_list('blocked_id', flat=True))
+        blocked_by_ids = set(Block.objects.filter(blocked=request.user).values_list('blocker_id', flat=True))
+        exclude_ids = {request.user.id} | blocked_ids | blocked_by_ids
+        users = users.exclude(id__in=exclude_ids)
     
     users = users[:20]  # Limit to 20 users
     
@@ -584,7 +609,10 @@ def search_view(request):
     ).order_by('-follower_count')
     
     if request.user.is_authenticated:
-        users = users.exclude(id=request.user.id)
+        blocked_ids = set(Block.objects.filter(blocker=request.user).values_list('blocked_id', flat=True))
+        blocked_by_ids = set(Block.objects.filter(blocked=request.user).values_list('blocker_id', flat=True))
+        exclude_ids = {request.user.id} | blocked_ids | blocked_by_ids
+        users = users.exclude(id__in=exclude_ids)
     
     users = users[:10]  # Limit to 10 user results
     
@@ -592,7 +620,16 @@ def search_view(request):
     posts = Post.objects.filter(
         Q(title__icontains=query) |
         Q(content__icontains=query)
-    ).select_related('author', 'author__profile').order_by('-date_posted')[:10]
+    ).select_related('author', 'author__profile').order_by('-date_posted')
+    
+    if request.user.is_authenticated:
+        blocked_ids = set(Block.objects.filter(blocker=request.user).values_list('blocked_id', flat=True))
+        blocked_by_ids = set(Block.objects.filter(blocked=request.user).values_list('blocker_id', flat=True))
+        all_blocked = blocked_ids | blocked_by_ids
+        if all_blocked:
+            posts = posts.exclude(author_id__in=all_blocked)
+    
+    posts = posts[:10]
     
     return Response({
         'users': SuggestionUserSerializer(users, many=True, context={'request': request}).data,
@@ -730,6 +767,14 @@ def conversations_view(request):
         
         if recipient == request.user:
             return Response({'error': 'Cannot message yourself'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Block check: cannot message blocked users
+        is_blocked = Block.objects.filter(
+            Q(blocker=request.user, blocked=recipient) |
+            Q(blocker=recipient, blocked=request.user)
+        ).exists()
+        if is_blocked:
+            return Response({'error': 'Cannot message this user.'}, status=status.HTTP_403_FORBIDDEN)
         
         # Check if conversation already exists between these two users
         existing = Conversation.objects.filter(participants=request.user).filter(participants=recipient)
@@ -2308,3 +2353,210 @@ def sphere_deny_request_view(request, slug):
     jr.save(update_fields=['status', 'reviewed_at', 'reviewed_by'])
 
     return Response({'detail': 'Request denied'})
+
+
+# ============ BLOCK / MUTE / REPORT API ============
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def block_user_view(request, username):
+    """Block a user. The blocked user cannot see your content or interact with you."""
+    try:
+        target = User.objects.get(username=username)
+    except User.DoesNotExist:
+        return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    if target == request.user:
+        return Response({'error': 'Cannot block yourself'}, status=status.HTTP_400_BAD_REQUEST)
+
+    _, created = Block.objects.get_or_create(blocker=request.user, blocked=target)
+    # Also unfollow in both directions
+    Follow.objects.filter(follower=request.user, following=target).delete()
+    Follow.objects.filter(follower=target, following=request.user).delete()
+
+    return Response({'detail': 'User blocked' if created else 'Already blocked'})
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def unblock_user_view(request, username):
+    """Unblock a previously blocked user."""
+    try:
+        target = User.objects.get(username=username)
+    except User.DoesNotExist:
+        return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    deleted, _ = Block.objects.filter(blocker=request.user, blocked=target).delete()
+    if deleted:
+        return Response({'detail': 'User unblocked'})
+    return Response({'error': 'User was not blocked'}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def mute_user_view(request, username):
+    """Mute a user. Their content will be hidden from your feeds."""
+    try:
+        target = User.objects.get(username=username)
+    except User.DoesNotExist:
+        return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    if target == request.user:
+        return Response({'error': 'Cannot mute yourself'}, status=status.HTTP_400_BAD_REQUEST)
+
+    _, created = Mute.objects.get_or_create(muter=request.user, muted=target)
+    return Response({'detail': 'User muted' if created else 'Already muted'})
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def unmute_user_view(request, username):
+    """Unmute a previously muted user."""
+    try:
+        target = User.objects.get(username=username)
+    except User.DoesNotExist:
+        return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    deleted, _ = Mute.objects.filter(muter=request.user, muted=target).delete()
+    if deleted:
+        return Response({'detail': 'User unmuted'})
+    return Response({'error': 'User was not muted'}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def blocked_users_view(request):
+    """Return the list of users the current user has blocked."""
+    blocks = Block.objects.filter(blocker=request.user).select_related('blocked__profile')
+    users = []
+    for b in blocks:
+        users.append({
+            'id': b.blocked.id,
+            'username': b.blocked.username,
+            'profile_image': b.blocked.profile.image.url if hasattr(b.blocked, 'profile') and b.blocked.profile.image else None,
+            'blocked_at': b.created_at,
+        })
+    return Response(users)
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def muted_users_view(request):
+    """Return the list of users the current user has muted."""
+    mutes = Mute.objects.filter(muter=request.user).select_related('muted__profile')
+    users = []
+    for m in mutes:
+        users.append({
+            'id': m.muted.id,
+            'username': m.muted.username,
+            'profile_image': m.muted.profile.image.url if hasattr(m.muted, 'profile') and m.muted.profile.image else None,
+            'muted_at': m.created_at,
+        })
+    return Response(users)
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def report_content_view(request):
+    """Report a user, post, or comment for moderation."""
+    content_type = request.data.get('content_type')
+    reason = request.data.get('reason')
+    description = request.data.get('description', '')
+
+    valid_types = ['user', 'post', 'comment']
+    valid_reasons = [c[0] for c in Report.REASON_CHOICES]
+
+    if content_type not in valid_types:
+        return Response({'error': f'content_type must be one of: {valid_types}'}, status=status.HTTP_400_BAD_REQUEST)
+    if reason not in valid_reasons:
+        return Response({'error': f'reason must be one of: {valid_reasons}'}, status=status.HTTP_400_BAD_REQUEST)
+
+    report_kwargs = {
+        'reporter': request.user,
+        'content_type': content_type,
+        'reason': reason,
+        'description': description[:2000],
+    }
+
+    if content_type == 'user':
+        username = request.data.get('username')
+        if not username:
+            return Response({'error': 'username is required'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            target = User.objects.get(username=username)
+        except User.DoesNotExist:
+            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+        if target == request.user:
+            return Response({'error': 'Cannot report yourself'}, status=status.HTTP_400_BAD_REQUEST)
+        report_kwargs['reported_user'] = target
+
+    elif content_type == 'post':
+        from blog.models import Post
+        post_id = request.data.get('post_id')
+        if not post_id:
+            return Response({'error': 'post_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            post = Post.objects.get(id=post_id)
+        except Post.DoesNotExist:
+            return Response({'error': 'Post not found'}, status=status.HTTP_404_NOT_FOUND)
+        report_kwargs['reported_post'] = post
+
+    elif content_type == 'comment':
+        from blog.models import Comment
+        comment_id = request.data.get('comment_id')
+        if not comment_id:
+            return Response({'error': 'comment_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            comment = Comment.objects.get(id=comment_id)
+        except Comment.DoesNotExist:
+            return Response({'error': 'Comment not found'}, status=status.HTTP_404_NOT_FOUND)
+        report_kwargs['reported_comment'] = comment
+
+    report = Report.objects.create(**report_kwargs)
+
+    # Send email notification to admin/moderator
+    try:
+        from django.core.mail import send_mail
+        from django.conf import settings as app_settings
+        notify_email = getattr(app_settings, 'REPORT_NOTIFY_EMAIL', None)
+        if notify_email:
+            target_info = {
+                'user': f'User: @{report_kwargs.get("reported_user", "")}',
+                'post': f'Post ID: {request.data.get("post_id", "")}',
+                'comment': f'Comment ID: {request.data.get("comment_id", "")}',
+            }.get(content_type, '')
+            send_mail(
+                subject=f'[Report] New {content_type} report: {reason}',
+                message=(
+                    f'New report submitted\n\n'
+                    f'Type: {content_type}\n'
+                    f'{target_info}\n'
+                    f'Reason: {reason}\n'
+                    f'Reporter: @{request.user.username}\n'
+                    f'Description: {description or "(none)"}\n\n'
+                    f'Review at: {request.build_absolute_uri("/admin/users/report/")}'
+                ),
+                from_email=None,  # uses DEFAULT_FROM_EMAIL
+                recipient_list=[notify_email],
+                fail_silently=True,
+            )
+    except Exception:
+        pass  # don't fail the report if email fails
+
+    return Response({'detail': 'Report submitted. Our team will review it.'}, status=status.HTTP_201_CREATED)
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def relationship_status_view(request, username):
+    """Get the block/mute status between the current user and the given username."""
+    try:
+        target = User.objects.get(username=username)
+    except User.DoesNotExist:
+        return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    return Response({
+        'is_blocked': Block.objects.filter(blocker=request.user, blocked=target).exists(),
+        'is_muted': Mute.objects.filter(muter=request.user, muted=target).exists(),
+        'is_blocked_by': Block.objects.filter(blocker=target, blocked=request.user).exists(),
+    })

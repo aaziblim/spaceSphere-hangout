@@ -37,7 +37,7 @@ export function StreamSummaryModal({
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
 
       {/* Modal Card */}
-      <div className="relative w-full max-w-md bg-[#1c1c1e] rounded-2xl shadow-2xl border border-white/10 overflow-hidden">
+      <div className="relative w-full max-w-md bg-[var(--bg-secondary)] rounded-2xl shadow-2xl border border-white/10 overflow-hidden">
         <div className="p-6">
           {/* Header */}
           <div className="text-center mb-6">
@@ -79,7 +79,7 @@ export function StreamSummaryModal({
               <button
                 onClick={onSaveAsPost}
                 disabled={isSaving}
-                className="w-full py-3.5 rounded-xl font-bold text-white bg-[#007AFF] hover:bg-[#0062CC] transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100"
+                className="w-full py-3.5 rounded-xl font-bold text-white bg-[var(--action-blue)] hover:bg-[var(--action-blue-hover)] transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100"
               >
                 {isSaving ? (
                   <div className="flex items-center justify-center gap-2">
@@ -101,7 +101,7 @@ export function StreamSummaryModal({
           ) : (
             <button
               onClick={onDiscard}
-              className="w-full py-3.5 rounded-xl font-bold text-white bg-[#007AFF] hover:bg-[#0062CC] transition-all active:scale-95"
+              className="w-full py-3.5 rounded-xl font-bold text-white bg-[var(--action-blue)] hover:bg-[var(--action-blue-hover)] transition-all active:scale-95"
             >
               Done
             </button>

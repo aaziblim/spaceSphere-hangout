@@ -120,7 +120,7 @@ export default function Navbar() {
                         </svg>
                         View Profile
                       </Link>
-                      <Link to="/?tab=saved" className="flex items-center gap-3 px-4 py-2.5 text-sm transition-colors hover:bg-[var(--bg-tertiary)]" style={{ color: '#F59E0B' }}>
+                      <Link to="/?tab=saved" className="flex items-center gap-3 px-4 py-2.5 text-sm transition-colors hover:bg-[var(--bg-tertiary)]" style={{ color: 'var(--warning)' }}>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
                           <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
                         </svg>

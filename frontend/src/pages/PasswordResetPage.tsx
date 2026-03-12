@@ -89,13 +89,13 @@ export default function PasswordResetPage() {
       </p>
 
       {status === 'success' && (
-        <div className="p-4 rounded-xl mb-6 text-sm font-medium" style={{ backgroundColor: 'rgba(52, 199, 89, 0.1)', color: '#34c759' }}>
+        <div className="p-4 rounded-xl mb-6 text-sm font-medium" style={{ backgroundColor: 'var(--success-alpha)', color: 'var(--success)' }}>
           Password changed successfully.
         </div>
       )}
 
       {errors.length > 0 && (
-        <div className="p-4 rounded-xl mb-6 text-sm" style={{ backgroundColor: 'rgba(255, 59, 48, 0.1)', color: '#ff3b30' }}>
+        <div className="p-4 rounded-xl mb-6 text-sm" style={{ backgroundColor: 'var(--danger-alpha)', color: 'var(--danger)' }}>
           {errors.map((err, i) => (
             <p key={i}>{err}</p>
           ))}

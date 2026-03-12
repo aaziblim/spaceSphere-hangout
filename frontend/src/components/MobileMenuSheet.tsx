@@ -153,7 +153,7 @@ export default function MobileMenuSheet({ open, onClose }: MobileMenuSheetProps)
                 isActive={location.pathname.startsWith('/live')}
                 onClick={() => handleNavigate('/live')}
                 badge="LIVE"
-                badgeColor="#FF3B30"
+                badgeColor="var(--danger)"
               />
             </div>
 
@@ -176,7 +176,7 @@ export default function MobileMenuSheet({ open, onClose }: MobileMenuSheetProps)
                     label="Get Verified"
                     onClick={() => handleNavigate('/get-verified')}
                     badge="NEW"
-                    badgeColor="#1DA1F2"
+                    badgeColor="var(--brand-blue)"
                   />
                 </>
               )}
@@ -702,9 +702,9 @@ function LiveContent({ onClose }: { onClose: () => void }) {
                   src={stream.host.profile_image || '/default-avatar.png'}
                   alt={stream.host.username}
                   className="w-12 h-12 rounded-full object-cover"
-                  style={{ border: '3px solid #FF3B30' }}
+                  style={{ border: '3px solid var(--danger)' }}
                 />
-                <span className="absolute -bottom-1 -right-1 px-1.5 py-0.5 text-[10px] font-bold rounded text-white" style={{ backgroundColor: '#FF3B30' }}>
+                <span className="absolute -bottom-1 -right-1 px-1.5 py-0.5 text-[10px] font-bold rounded text-white" style={{ backgroundColor: 'var(--danger)' }}>
                   LIVE
                 </span>
               </div>
@@ -736,7 +736,7 @@ function LiveContent({ onClose }: { onClose: () => void }) {
       <button
         onClick={() => { navigate('/live'); onClose() }}
         className="w-full py-3 rounded-xl text-sm font-semibold text-white"
-        style={{ backgroundColor: '#FF3B30' }}
+        style={{ backgroundColor: 'var(--danger)' }}
       >
         🎬 Go to Live page
       </button>

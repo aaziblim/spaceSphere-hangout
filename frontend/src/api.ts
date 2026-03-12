@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { Paginated, Post, User, PostFormData, Comment, CommentFormData, Community } from './types'
+import type { Paginated, Post, User, PostFormData, Comment, CommentFormData, Community, RelationshipStatus, BlockedUser, MutedUser, ReportPayload } from './types'
 
 // Use relative URL so requests go through Vite proxy in dev
 const apiBase = import.meta.env.VITE_API_BASE ?? '/api'
@@ -649,6 +649,43 @@ export async function approveSphereRequest(slug: string, requestId: number): Pro
 
 export async function denySphereRequest(slug: string, requestId: number): Promise<void> {
   await api.post(`/spheres/${slug}/deny/`, { request_id: requestId })
+}
+
+// ============ BLOCK / MUTE / REPORT API ============
+
+export async function blockUser(username: string): Promise<void> {
+  await api.post(`/users/${username}/block/`)
+}
+
+export async function unblockUser(username: string): Promise<void> {
+  await api.post(`/users/${username}/unblock/`)
+}
+
+export async function muteUser(username: string): Promise<void> {
+  await api.post(`/users/${username}/mute/`)
+}
+
+export async function unmuteUser(username: string): Promise<void> {
+  await api.post(`/users/${username}/unmute/`)
+}
+
+export async function fetchRelationshipStatus(username: string): Promise<RelationshipStatus> {
+  const { data } = await api.get<RelationshipStatus>(`/users/${username}/relationship/`)
+  return data
+}
+
+export async function fetchBlockedUsers(): Promise<BlockedUser[]> {
+  const { data } = await api.get<BlockedUser[]>('/blocked/')
+  return data
+}
+
+export async function fetchMutedUsers(): Promise<MutedUser[]> {
+  const { data } = await api.get<MutedUser[]>('/muted/')
+  return data
+}
+
+export async function reportContent(payload: ReportPayload): Promise<void> {
+  await api.post('/report/', payload)
 }
 
 // Default export for axios instance (for direct API calls)

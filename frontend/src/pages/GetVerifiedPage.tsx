@@ -13,7 +13,7 @@ const TIERS = [
     annual: 80,
     description: 'For individuals',
     features: ['Blue verified badge', 'Edit posts', 'Longer posts (10k chars)', 'Bookmark folders', 'Creator analytics'],
-    color: '#1DA1F2',
+    color: 'var(--brand-blue)',
   },
   {
     id: 'premium',
@@ -22,7 +22,7 @@ const TIERS = [
     annual: 160,
     description: 'For creators',
     features: ['Everything in Blue', 'Priority in replies', 'Half ads in feed', 'Longer video uploads', 'Early feature access', 'Priority support'],
-    color: '#1DA1F2',
+    color: 'var(--brand-blue)',
     popular: true,
   },
   {
@@ -32,7 +32,7 @@ const TIERS = [
     annual: 2000,
     description: 'For businesses',
     features: ['Everything in Premium', 'Gold badge', 'Affiliate accounts', 'Custom branding', 'Advanced analytics', 'Account manager'],
-    color: '#F59E0B',
+    color: 'var(--warning)',
   },
 ]
 
@@ -97,12 +97,12 @@ export default function GetVerifiedPage() {
     return (
       <div className="min-h-[80vh] flex items-center justify-center px-4">
         <div className="max-w-md w-full text-center">
-          <div className="w-24 h-24 mx-auto mb-8 rounded-full flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #1DA1F2 0%, #0A84FF 100%)' }}>
+          <div className="w-24 h-24 mx-auto mb-8 rounded-full flex items-center justify-center" style={{ background: 'var(--gradient-verified)' }}>
             <VerifiedBadge size="lg" className="w-12 h-12 [&_path]:fill-white" />
           </div>
           <h1 className="text-3xl font-bold mb-3" style={{ color: 'var(--text-primary)' }}>Get Verified</h1>
           <p className="text-lg mb-10" style={{ color: 'var(--text-secondary)' }}>Sign in to subscribe and unlock premium features</p>
-          <button onClick={() => navigate('/login')} className="w-full py-4 rounded-full font-semibold text-white text-lg mb-4" style={{ background: 'linear-gradient(135deg, #1DA1F2 0%, #0A84FF 100%)' }}>
+          <button onClick={() => navigate('/login')} className="w-full py-4 rounded-full font-semibold text-white text-lg mb-4" style={{ background: 'var(--gradient-verified)' }}>
             Sign in
           </button>
           <button onClick={() => navigate('/register')} className="w-full py-4 rounded-full font-semibold text-lg border-2" style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}>
@@ -117,7 +117,7 @@ export default function GetVerifiedPage() {
   if (loading) {
     return (
       <div className="min-h-[80vh] flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-[#1DA1F2] border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-2 border-[var(--brand-blue)] border-t-transparent rounded-full animate-spin" />
       </div>
     )
   }
@@ -128,15 +128,15 @@ export default function GetVerifiedPage() {
       <div className="min-h-[80vh] flex items-center justify-center px-4">
         <div className="max-w-md w-full text-center">
           <div className="relative w-28 h-28 mx-auto mb-8">
-            <div className="absolute inset-0 rounded-full animate-ping opacity-25" style={{ backgroundColor: '#1DA1F2' }} />
-            <div className="relative w-full h-full rounded-full flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #1DA1F2 0%, #0A84FF 100%)' }}>
+            <div className="absolute inset-0 rounded-full animate-ping opacity-25" style={{ backgroundColor: 'var(--brand-blue)' }} />
+            <div className="relative w-full h-full rounded-full flex items-center justify-center" style={{ background: 'var(--gradient-verified)' }}>
               <VerifiedBadge size="lg" className="w-14 h-14 [&_path]:fill-white" />
             </div>
           </div>
           <h1 className="text-3xl font-bold mb-3" style={{ color: 'var(--text-primary)' }}>Welcome to Verified</h1>
           <p className="text-lg mb-4" style={{ color: 'var(--text-secondary)' }}>Your badge is now active!</p>
           <p className="text-sm mb-10" style={{ color: 'var(--text-tertiary)' }}>📧 A confirmation email has been sent to {user.email}</p>
-          <button onClick={() => navigate(`/user/${user.username}`)} className="w-full py-4 rounded-full font-semibold text-white text-lg" style={{ background: 'linear-gradient(135deg, #1DA1F2 0%, #0A84FF 100%)' }}>
+          <button onClick={() => navigate(`/user/${user.username}`)} className="w-full py-4 rounded-full font-semibold text-white text-lg" style={{ background: 'var(--gradient-verified)' }}>
             View your profile
           </button>
         </div>
@@ -149,7 +149,7 @@ export default function GetVerifiedPage() {
     return (
       <div className="min-h-[80vh] flex items-center justify-center px-4">
         <div className="max-w-md w-full text-center">
-          <div className="w-24 h-24 mx-auto mb-8 rounded-full flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #1DA1F2 0%, #0A84FF 100%)' }}>
+          <div className="w-24 h-24 mx-auto mb-8 rounded-full flex items-center justify-center" style={{ background: 'var(--gradient-verified)' }}>
             <VerifiedBadge size="lg" className="w-12 h-12 [&_path]:fill-white" />
           </div>
           <h1 className="text-3xl font-bold mb-2 flex items-center justify-center gap-3" style={{ color: 'var(--text-primary)' }}>
@@ -161,12 +161,12 @@ export default function GetVerifiedPage() {
           </p>
 
           {subscription.status === 'cancelled' && (
-            <div className="mb-6 px-4 py-3 rounded-xl" style={{ backgroundColor: 'rgba(245, 158, 11, 0.1)' }}>
-              <p className="text-sm" style={{ color: '#F59E0B' }}>⚠️ Subscription cancelled</p>
+            <div className="mb-6 px-4 py-3 rounded-xl" style={{ backgroundColor: 'var(--warning-alpha)' }}>
+              <p className="text-sm" style={{ color: 'var(--warning)' }}>⚠️ Subscription cancelled</p>
             </div>
           )}
 
-          <button onClick={() => navigate(`/user/${user.username}`)} className="w-full py-4 rounded-full font-semibold text-white text-lg mb-4" style={{ background: 'linear-gradient(135deg, #1DA1F2 0%, #0A84FF 100%)' }}>
+          <button onClick={() => navigate(`/user/${user.username}`)} className="w-full py-4 rounded-full font-semibold text-white text-lg mb-4" style={{ background: 'var(--gradient-verified)' }}>
             View profile
           </button>
 
@@ -186,7 +186,7 @@ export default function GetVerifiedPage() {
                 </p>
                 <div className="flex gap-3">
                   <button onClick={() => setShowCancelModal(false)} className="flex-1 py-3 rounded-full font-semibold" style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}>Keep</button>
-                  <button onClick={handleCancel} disabled={cancelling} className="flex-1 py-3 rounded-full font-semibold text-white" style={{ backgroundColor: '#EF4444' }}>
+                  <button onClick={handleCancel} disabled={cancelling} className="flex-1 py-3 rounded-full font-semibold text-white" style={{ backgroundColor: 'var(--danger)' }}>
                     {cancelling ? '...' : 'Cancel'}
                   </button>
                 </div>
@@ -215,7 +215,7 @@ export default function GetVerifiedPage() {
             Monthly
           </button>
           <button onClick={() => setBilling('annual')} className="px-6 py-3 rounded-full text-sm font-semibold transition-all flex items-center gap-2" style={{ backgroundColor: billing === 'annual' ? 'var(--bg-primary)' : 'transparent', color: billing === 'annual' ? 'var(--text-primary)' : 'var(--text-tertiary)' }}>
-            Annual <span className="px-2 py-0.5 rounded-full text-xs font-bold text-white" style={{ backgroundColor: '#10B981' }}>-17%</span>
+            Annual <span className="px-2 py-0.5 rounded-full text-xs font-bold text-white" style={{ backgroundColor: 'var(--success)' }}>-17%</span>
           </button>
         </div>
       </div>
@@ -230,15 +230,15 @@ export default function GetVerifiedPage() {
             <button
               key={tier.id}
               onClick={() => setSelectedTier(tier.id)}
-              className={`relative p-6 rounded-2xl text-left transition-all border-2 ${isSelected ? 'border-[#1DA1F2] scale-[1.02]' : 'border-transparent hover:border-[var(--border)]'}`}
-              style={{ backgroundColor: isSelected ? 'rgba(29, 161, 242, 0.06)' : 'var(--bg-primary)', boxShadow: 'var(--card-shadow)' }}
+              className={`relative p-6 rounded-2xl text-left transition-all border-2 ${isSelected ? 'border-[var(--brand-blue)] scale-[1.02]' : 'border-transparent hover:border-[var(--border)]'}`}
+              style={{ backgroundColor: isSelected ? 'var(--brand-blue-alpha)' : 'var(--bg-primary)', boxShadow: 'var(--card-shadow)' }}
             >
               {tier.popular && (
-                <span className="absolute -top-3 right-4 px-3 py-1 rounded-full text-xs font-bold text-white" style={{ backgroundColor: '#1DA1F2' }}>Popular</span>
+                <span className="absolute -top-3 right-4 px-3 py-1 rounded-full text-xs font-bold text-white" style={{ backgroundColor: 'var(--brand-blue)' }}>Popular</span>
               )}
 
               <div className="flex items-center gap-2 mb-3">
-                <div className="w-6 h-6 rounded-full flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${tier.color} 0%, ${tier.id === 'organization' ? '#D97706' : '#0A84FF'} 100%)` }}>
+                <div className="w-6 h-6 rounded-full flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${tier.color} 0%, ${tier.id === 'organization' ? 'var(--warning)' : 'var(--action-blue)'} 100%)` }}>
                   <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="white" strokeWidth={3}><path d="M20 6L9 17l-5-5" /></svg>
                 </div>
                 <span className="font-bold" style={{ color: 'var(--text-primary)' }}>{tier.name}</span>
@@ -254,14 +254,14 @@ export default function GetVerifiedPage() {
               <ul className="space-y-2">
                 {tier.features.slice(0, 3).map((f, i) => (
                   <li key={i} className="flex items-center gap-2 text-sm" style={{ color: 'var(--text-secondary)' }}>
-                    <svg viewBox="0 0 24 24" className="w-4 h-4 shrink-0" fill="none" stroke="#1DA1F2" strokeWidth={3}><path d="M20 6L9 17l-5-5" /></svg>
+                    <svg viewBox="0 0 24 24" className="w-4 h-4 shrink-0" fill="none" stroke="var(--brand-blue)" strokeWidth={3}><path d="M20 6L9 17l-5-5" /></svg>
                     {f}
                   </li>
                 ))}
               </ul>
 
               {/* Selection indicator */}
-              <div className={`absolute top-5 right-5 w-5 h-5 rounded-full border-2 flex items-center justify-center ${isSelected ? 'border-[#1DA1F2] bg-[#1DA1F2]' : 'border-[var(--border)]'}`}>
+              <div className={`absolute top-5 right-5 w-5 h-5 rounded-full border-2 flex items-center justify-center ${isSelected ? 'border-[var(--brand-blue)] bg-[var(--brand-blue)]' : 'border-[var(--border)]'}`}>
                 {isSelected && <svg viewBox="0 0 24 24" className="w-3 h-3" fill="none" stroke="white" strokeWidth={3}><path d="M20 6L9 17l-5-5" /></svg>}
               </div>
             </button>
@@ -274,7 +274,7 @@ export default function GetVerifiedPage() {
         <button
           onClick={handleSubscribe}
           className="w-full py-4 rounded-full font-semibold text-white text-lg transition-all hover:opacity-90 active:scale-[0.98]"
-          style={{ background: `linear-gradient(135deg, ${currentTier.color} 0%, ${currentTier.id === 'organization' ? '#D97706' : '#0A84FF'} 100%)` }}
+          style={{ background: `linear-gradient(135deg, ${currentTier.color} 0%, ${currentTier.id === 'organization' ? 'var(--warning)' : 'var(--action-blue)'} 100%)` }}
         >
           Subscribe for ${billing === 'annual' ? currentTier.annual : currentTier.price}/{billing === 'annual' ? 'year' : 'month'}
         </button>

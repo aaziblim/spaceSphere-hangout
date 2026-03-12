@@ -28,21 +28,21 @@ export const MILESTONES: Record<string, Milestone> = {
         title: 'Karma King',
         description: 'You reached 100 karma points',
         emoji: '👑',
-        color: '#F59E0B'
+color: 'var(--warning)'
     },
     week_warrior: {
         id: 'week_warrior',
         title: 'Week Warrior',
         description: '7-day activity streak!',
         emoji: '🔥',
-        color: '#EF4444'
+        color: 'var(--danger)'
     },
     community_builder: {
         id: 'community_builder',
         title: 'Community Builder',
         description: 'Joined 5 communities',
-        emoji: '🏘️',
-        color: '#10B981'
+        emoji: '🏨️',
+        color: 'var(--success)'
     },
     social_butterfly: {
         id: 'social_butterfly',

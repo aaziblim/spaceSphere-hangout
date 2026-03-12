@@ -197,14 +197,14 @@ function NavIcon({ href, icon, label, isActive, isCreate, isLive, isMenu, isMess
       <Link
         to={href!}
         className="flex flex-col items-center gap-0.5 py-1 px-3 relative"
-        style={{ color: isActive ? '#ef4444' : 'var(--text-secondary)' }}
+        style={{ color: isActive ? 'var(--danger)' : 'var(--text-secondary)' }}
       >
         {icons[icon]}
         <span className="text-[10px] font-medium">{label}</span>
         {/* Live indicator dot */}
         <span
           className="absolute top-0.5 right-2 w-2 h-2 rounded-full"
-          style={{ backgroundColor: '#ef4444' }}
+          style={{ backgroundColor: 'var(--danger)' }}
         />
       </Link>
     )

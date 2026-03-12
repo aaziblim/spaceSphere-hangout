@@ -8,6 +8,7 @@ import NotificationsSection from '../components/settings/NotificationsSection'
 import PrivacySection from '../components/settings/PrivacySection'
 import SecuritySection from '../components/settings/SecuritySection'
 import DangerZoneSection from '../components/settings/DangerZoneSection'
+import BlockedMutedSection from '../components/settings/BlockedMutedSection'
 
 const sections = [
   { id: 'profile', label: 'Profile', icon: (
@@ -37,6 +38,12 @@ const sections = [
   { id: 'privacy', label: 'Privacy', icon: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-[18px] h-[18px]">
       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+    </svg>
+  )},
+  { id: 'blocked', label: 'Blocked & Muted', icon: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-[18px] h-[18px]">
+      <circle cx="12" cy="12" r="10" />
+      <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
     </svg>
   )},
   { id: 'security', label: 'Security', icon: (
@@ -155,7 +162,7 @@ export default function SettingsPage() {
                 onClick={() => scrollTo(s.id)}
                 className="flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-medium whitespace-nowrap transition-all duration-200"
                 style={{
-                  backgroundColor: isActive ? (isDanger ? 'rgba(255,59,48,0.1)' : 'var(--accent-alpha)') : 'var(--bg-primary)',
+                  backgroundColor: isActive ? (isDanger ? 'var(--danger-alpha)' : 'var(--accent-alpha)') : 'var(--bg-primary)',
                   color: isActive ? (isDanger ? 'var(--danger)' : 'var(--accent)') : 'var(--text-secondary)',
                   border: isActive ? `1.5px solid ${isDanger ? 'var(--danger)' : 'var(--accent)'}` : '1.5px solid var(--border-light)',
                 }}
@@ -190,7 +197,7 @@ export default function SettingsPage() {
                     className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200 text-left"
                     style={{
                       backgroundColor: isActive
-                        ? (isDanger ? 'rgba(255,59,48,0.08)' : 'var(--accent-alpha)')
+                        ? (isDanger ? 'var(--danger-alpha)' : 'var(--accent-alpha)')
                         : 'transparent',
                       color: isActive
                         ? (isDanger ? 'var(--danger)' : 'var(--accent)')
@@ -219,6 +226,7 @@ export default function SettingsPage() {
           <AppearanceSection />
           <NotificationsSection />
           <PrivacySection />
+          <BlockedMutedSection />
           <SecuritySection />
           <DangerZoneSection />
         </div>

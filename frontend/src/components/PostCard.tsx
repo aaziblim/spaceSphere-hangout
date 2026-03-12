@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import VerifiedBadge from './VerifiedBadge'
+import UserActionMenu from './UserActionMenu'
 import type { Post } from '../types'
 
 export function timeAgo(date: string) {
@@ -177,7 +178,7 @@ export default function PostCard({
     }
 
     return (
-        <article className="rounded-3xl overflow-hidden transition-all duration-300 hover:translate-y-[-4px] group" style={{ backgroundColor: 'var(--bg-primary)', boxShadow: 'var(--card-shadow)' }}>
+        <article className="rounded-3xl transition-all duration-300 hover:translate-y-[-4px] group" style={{ backgroundColor: 'var(--bg-primary)', boxShadow: 'var(--card-shadow)' }}>
             <div className="p-4 pb-3 flex items-center gap-3">
                 <Link to={`/user/${post.author.username}`} className="relative shrink-0">
                     <div className="w-10 h-10 rounded-full overflow-hidden ring-2 ring-offset-2 transition-transform group-hover:scale-105" style={{ backgroundColor: 'var(--bg-tertiary)', borderColor: isHot ? '#FF6B35' : 'var(--border-light)' }}>
@@ -202,6 +203,12 @@ export default function PostCard({
                         {readTime && <><span className="opacity-50">•</span><span>{readTime}</span></>}
                     </div>
                 </div>
+                <UserActionMenu
+                    username={post.author.username}
+                    currentUsername={currentUsername}
+                    contentType="post"
+                    targetId={{ post_id: post.id }}
+                />
             </div>
 
             {(post.post_image_url || post.post_video_url) && (
@@ -279,7 +286,7 @@ export default function PostCard({
 
                     <div className="flex-1" />
 
-                    <button onClick={handleSave} aria-label="Save" className={`p-2 rounded-xl transition-all hover:scale-105 ${saveAnim ? 'animate-pop' : ''}`} style={{ color: isSaved ? '#F59E0B' : 'var(--text-secondary)' }}>
+                    <button onClick={handleSave} aria-label="Save" className={`p-2 rounded-xl transition-all hover:scale-105 ${saveAnim ? 'animate-pop' : ''}`} style={{ color: isSaved ? 'var(--warning)' : 'var(--text-secondary)' }}>
                         <svg viewBox="0 0 24 24" fill={isSaved ? "currentColor" : "none"} stroke="currentColor" strokeWidth={1.5} className="w-5 h-5">
                             <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
                         </svg>

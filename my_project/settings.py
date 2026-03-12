@@ -80,9 +80,24 @@ INSTALLED_APPS = [
 # Channels configuration
 ASGI_APPLICATION = 'my_project.asgi.application'
 
-# Channel layers - use Redis when available
-REDIS_URL = os.environ.get('REDIS_URL')
-if REDIS_URL:
+# Redis
+REDIS_ENABLED = env_bool('REDIS_ENABLED', default=False)
+REDIS_URL = os.environ.get('REDIS_URL') or 'redis://127.0.0.1:6379/0'
+
+# Cache/channel layers: use local in-memory defaults unless Redis is explicitly enabled.
+if REDIS_ENABLED:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django_redis.cache.RedisCache',
+            'LOCATION': REDIS_URL,
+            'OPTIONS': {
+                'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+                # Do not break requests if Redis becomes temporarily unavailable.
+                'IGNORE_EXCEPTIONS': True,
+            },
+        },
+    }
+
     CHANNEL_LAYERS = {
         'default': {
             'BACKEND': 'channels_redis.core.RedisChannelLayer',
@@ -92,6 +107,13 @@ if REDIS_URL:
         },
     }
 else:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'local-dev-cache',
+        },
+    }
+
     CHANNEL_LAYERS = {
         'default': {
             'BACKEND': 'channels.layers.InMemoryChannelLayer',
@@ -429,6 +451,9 @@ EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
 DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'noreply@myproject.com')
 
+# Email address that receives moderation report notifications
+REPORT_NOTIFY_EMAIL = os.environ.get('REPORT_NOTIFY_EMAIL', EMAIL_HOST_USER or 'azizjibril559@gmail.com')
+
 # Password reset token expiry (24 hours)
 PASSWORD_RESET_TIMEOUT = 86400
 
@@ -469,14 +494,6 @@ def create_default_site():
                 }
             )
         except (ProgrammingError, OperationalError):
-            # Database might not be ready yet, which is fine
+    
             pass
 
-# Try to create the site when Django initializes
-# NOTE: Commented out for Docker - this runs before migrations
-# The site will be created by the entrypoint script after migrations
-# try:
-#     create_default_site()
-# except:
-#     # If there's any error, we'll handle it gracefully
-#     pass

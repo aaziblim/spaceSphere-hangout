@@ -6,6 +6,7 @@ import { useAuth } from '../AuthContext'
 import { useFollow } from '../hooks/useFollow'
 import { MessageButton, ChatDrawer } from '../components/Chat'
 import VerifiedBadge from '../components/VerifiedBadge'
+import UserActionMenu from '../components/UserActionMenu'
 
 export default function UserProfilePage() {
   const { username } = useParams<{ username: string }>()
@@ -153,6 +154,12 @@ export default function UserProfilePage() {
                     >
                       {followLoading ? '...' : isCurrentlyFollowing ? 'Following' : 'Follow'}
                     </button>
+                    <UserActionMenu
+                      username={profile.username}
+                      currentUsername={currentUser.username}
+                      contentType="user"
+                      targetId={{ username: profile.username }}
+                    />
                   </div>
                 ) : null}
               </div>
@@ -203,6 +210,12 @@ export default function UserProfilePage() {
                     <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                   </svg>
                 </button>
+                <UserActionMenu
+                  username={profile.username}
+                  currentUsername={currentUser.username}
+                  contentType="user"
+                  targetId={{ username: profile.username }}
+                />
               </div>
             ) : null}
           </div>
