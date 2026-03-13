@@ -601,7 +601,7 @@ export async function deleteAccount(password: string): Promise<void> {
 
 // ============ SPHERES / LIVEKIT API ============
 
-import type { SphereStatus, SphereJoinRequestItem } from './types'
+import type { SphereStatus, SphereJoinRequestItem, SphereParticipantSnapshot } from './types'
 
 export interface SphereJoinResponse {
   token: string
@@ -641,6 +641,24 @@ export async function requestJoinSphere(slug: string): Promise<{ status: string;
 export async function fetchSphereRequests(slug: string): Promise<{ requests: SphereJoinRequestItem[] }> {
   const { data } = await api.get(`/spheres/${slug}/requests/`)
   return data
+}
+
+export async function fetchSphereParticipants(slug: string): Promise<{ participants: SphereParticipantSnapshot[] }> {
+  const { data } = await api.get(`/spheres/${slug}/participants/`)
+  return data
+}
+
+export async function toggleSphereHandRaise(slug: string): Promise<{ raised: boolean }> {
+  const { data } = await api.post(`/spheres/${slug}/hand-raise/`)
+  return data
+}
+
+export async function promoteSphereSpeaker(slug: string, userId: number): Promise<void> {
+  await api.post(`/spheres/${slug}/promote/`, { user_id: userId })
+}
+
+export async function demoteSphereSpeaker(slug: string, userId: number): Promise<void> {
+  await api.post(`/spheres/${slug}/demote/`, { user_id: userId })
 }
 
 export async function approveSphereRequest(slug: string, requestId: number): Promise<void> {

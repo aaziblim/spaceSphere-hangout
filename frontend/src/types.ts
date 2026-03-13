@@ -210,6 +210,15 @@ export interface SphereJoinRequestItem {
   created_at: string
 }
 
+export interface SphereParticipantSnapshot {
+  user_id: number
+  username: string
+  profile_image: string | null
+  role: 'conductor' | 'speaker' | 'listener'
+  is_muted: boolean
+  hand_raised: boolean
+}
+
 // ============ BLOCK / MUTE / REPORT ============
 
 export interface RelationshipStatus {

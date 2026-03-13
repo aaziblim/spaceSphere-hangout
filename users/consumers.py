@@ -3,6 +3,7 @@ WebSocket consumers for real-time chat functionality.
 """
 
 import json
+import time
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from django.contrib.auth import get_user_model
@@ -285,6 +286,8 @@ class SpheresConsumer(AsyncWebsocketConsumer):
 
         self.slug = self.scope['url_route']['kwargs']['slug']
         self.room_group_name = f'sphere_{self.slug}'
+        self._last_orb_update_monotonic = 0.0
+        self._min_orb_interval_seconds = 0.033
 
         # Join room group
         await self.channel_layer.group_add(
@@ -324,16 +327,29 @@ class SpheresConsumer(AsyncWebsocketConsumer):
         )
 
     async def receive(self, text_data):
-        data = json.loads(text_data)
+        try:
+            data = json.loads(text_data)
+        except json.JSONDecodeError:
+            return
+
         message_type = data.get('type')
 
         # Directly relay physics updates to the group (high frequency)
         if message_type == 'orb_update':
+            now = time.monotonic()
+            if now - self._last_orb_update_monotonic < self._min_orb_interval_seconds:
+                return
+
+            sanitized_orb = self._sanitize_orb_payload(data.get('orb'))
+            if not sanitized_orb:
+                return
+
+            self._last_orb_update_monotonic = now
             await self.channel_layer.group_send(
                 self.room_group_name,
                 {
                     'type': 'orb_update',
-                    'orb': data.get('orb'),
+                    'orb': sanitized_orb,
                     'sender_channel_name': self.channel_name
                 }
             )
@@ -387,6 +403,26 @@ class SpheresConsumer(AsyncWebsocketConsumer):
                         'locked': data.get('locked', True),
                     }
                 )
+        elif message_type == 'scene_change':
+            is_host = await self._is_conductor()
+            if not is_host:
+                return
+
+            try:
+                scene = int(data.get('scene', 0))
+            except (TypeError, ValueError):
+                return
+
+            scene = max(0, min(2, scene))
+
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    'type': 'scene_change',
+                    'scene': scene,
+                    'changed_by': self.user.username,
+                }
+            )
 
     @database_sync_to_async
     def _is_conductor(self):
@@ -394,6 +430,39 @@ class SpheresConsumer(AsyncWebsocketConsumer):
         return CommunityMembership.objects.filter(
             user=self.user, community__slug=self.slug, role__in=('admin', 'moderator')
         ).exists()
+
+    def _sanitize_orb_payload(self, orb):
+        if not isinstance(orb, dict):
+            return None
+
+        try:
+            x = float(orb.get('x'))
+            y = float(orb.get('y'))
+            vx = float(orb.get('vx', 0))
+            vy = float(orb.get('vy', 0))
+        except (TypeError, ValueError):
+            return None
+
+        x = max(2.0, min(98.0, x))
+        y = max(2.0, min(98.0, y))
+        vx = max(-2.0, min(2.0, vx))
+        vy = max(-2.0, min(2.0, vy))
+
+        role = orb.get('role')
+        if role not in ('conductor', 'speaker', 'listener'):
+            role = None
+
+        return {
+            'id': str(self.user.id),
+            'username': self.user.username,
+            'image': self.user.profile.image.url if hasattr(self.user, 'profile') and self.user.profile.image else None,
+            'x': x,
+            'y': y,
+            'vx': vx,
+            'vy': vy,
+            'role': role,
+            'handRaised': bool(orb.get('handRaised', False)),
+        }
 
     # Handlers
     async def user_joined(self, event):
@@ -459,6 +528,13 @@ class SpheresConsumer(AsyncWebsocketConsumer):
         await self.send(text_data=json.dumps({
             'type': 'room_locked',
             'locked': event['locked'],
+        }))
+
+    async def scene_change(self, event):
+        await self.send(text_data=json.dumps({
+            'type': 'scene_change',
+            'scene': event['scene'],
+            'changed_by': event.get('changed_by'),
         }))
 
 
