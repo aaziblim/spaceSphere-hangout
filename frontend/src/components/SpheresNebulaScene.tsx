@@ -1,15 +1,35 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
-import { Billboard, Stars, useGLTF } from '@react-three/drei'
+import { Stars, useGLTF, Environment, useTexture, Sparkles } from '@react-three/drei'
 import { EffectComposer, Bloom, Noise, Vignette } from '@react-three/postprocessing'
 import { BlendFunction } from 'postprocessing'
 import gsap from 'gsap'
+import * as THREE from 'three'
 import type { AmbientLight, Group, Object3D, PointLight } from 'three'
-import { AdditiveBlending, Box3, Color, MathUtils, Sphere, Vector3 } from 'three'
+import { BackSide, Box3, Color, MathUtils, MeshBasicMaterial, Sphere, Vector3 } from 'three'
 import earthNightModel from '../assets/earth_night.glb'
 import needSomeSpaceModel from '../assets/need_some_space.glb'
 import solarSystemModel from '../assets/solar_system_animation.glb'
-import starryNightModel from '../assets/starry_night.glb'
+import { StarShader } from './StarShader'
+import spaceNebulaModel from '../assets/space_nebula_hdri_panorama_360_skydome.glb'
+
+interface Orb {
+  id: string
+  username: string
+  image: string | null
+  x: number
+  y: number
+  targetX: number
+  targetY: number
+  vx: number
+  vy: number
+  radius: number
+  isTalking: boolean
+  isSelf?: boolean
+  role?: 'conductor' | 'speaker' | 'listener'
+  handRaised?: boolean
+  leaving?: boolean
+}
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
@@ -37,7 +57,7 @@ function HeroModel({ modelUrl, progressRef, focus, spinSpeed, targetRadius, yOff
     bbox.getCenter(modelCenter)
 
     const radius = Math.max(bboxSphere.radius, 0.001)
-    const scale = MathUtils.clamp(targetRadius / radius, 0.35, 8)
+    const scale = MathUtils.clamp(targetRadius / radius, 0.35, 20)
 
     return {
       center: modelCenter,
@@ -79,59 +99,147 @@ function HeroModel({ modelUrl, progressRef, focus, spinSpeed, targetRadius, yOff
   )
 }
 
-function StarryConstellation({ active }: { active: boolean }) {
+function NebulaSkybox({ activeScene }: { activeScene: number }) {
   const groupRef = useRef<Group>(null)
+  const gltf = useGLTF(spaceNebulaModel)
+  const scene = useMemo(() => gltf.scene.clone(), [gltf.scene])
+  const opacityRef = useRef(0)
 
-  const stars = useMemo(
-    () => [
-      { pos: [-3.2, 1.5, -6.8], size: 0.07, opacity: 0.78 },
-      { pos: [-2.5, 0.9, -6.2], size: 0.05, opacity: 0.7 },
-      { pos: [-1.9, 1.8, -6.5], size: 0.06, opacity: 0.74 },
-      { pos: [-1.1, 1.2, -6.1], size: 0.05, opacity: 0.72 },
-      { pos: [-0.2, 1.7, -6.7], size: 0.08, opacity: 0.84 },
-      { pos: [0.9, 1.1, -6.3], size: 0.05, opacity: 0.68 },
-      { pos: [1.8, 1.9, -6.6], size: 0.06, opacity: 0.75 },
-      { pos: [2.6, 1.3, -6.4], size: 0.05, opacity: 0.7 },
-      { pos: [3.3, 1.8, -6.9], size: 0.07, opacity: 0.8 },
-      { pos: [-2.9, -0.8, -6.2], size: 0.05, opacity: 0.66 },
-      { pos: [-1.7, -1.1, -6.4], size: 0.06, opacity: 0.72 },
-      { pos: [-0.6, -0.7, -6.1], size: 0.05, opacity: 0.68 },
-      { pos: [0.7, -1.0, -6.3], size: 0.06, opacity: 0.73 },
-      { pos: [2.0, -0.9, -6.2], size: 0.05, opacity: 0.7 },
-      { pos: [3.1, -0.6, -6.4], size: 0.06, opacity: 0.74 },
-    ],
-    [],
-  )
-
-  useFrame(({ clock }) => {
-    if (!groupRef.current) return
-    const t = clock.getElapsedTime()
-    groupRef.current.visible = active
-    groupRef.current.children.forEach((child, index) => {
-      const pulse = 0.75 + Math.sin(t * (1.6 + index * 0.11)) * 0.25
-      child.scale.setScalar(pulse)
+  const basicMaterials = useMemo(() => {
+    const mats: MeshBasicMaterial[] = []
+    scene.traverse((child: Object3D) => {
+      const mesh = child as any
+      if (mesh.isMesh) {
+        const oldMats: any[] = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
+        const newMats = oldMats.map((old: any) => {
+          const basic = new MeshBasicMaterial({
+            map: old.map ?? null,
+            color: old.color ?? new Color(1, 1, 1),
+            side: BackSide,
+            depthTest: false,
+            depthWrite: false,
+            transparent: true,
+            opacity: 0,
+            fog: false,
+          })
+          mats.push(basic)
+          return basic
+        })
+        mesh.material = newMats.length === 1 ? newMats[0] : newMats
+        mesh.renderOrder = -100
+      }
     })
+    return mats
+  }, [scene])
+
+  useFrame(() => {
+    const target = activeScene === 1 ? 1 : 0
+    opacityRef.current = MathUtils.lerp(opacityRef.current, target, 0.055)
+    basicMaterials.forEach((mat) => {
+      mat.opacity = opacityRef.current
+    })
+    if (groupRef.current) {
+      groupRef.current.visible = opacityRef.current > 0.01
+      if (opacityRef.current > 0.01) groupRef.current.rotation.y += 0.00015
+    }
   })
 
   return (
-    <group ref={groupRef} visible={active}>
-      {stars.map((star, index) => (
-        <Billboard key={index} position={star.pos as [number, number, number]}>
-          <mesh>
-            <circleGeometry args={[star.size, 24]} />
-            <meshBasicMaterial color="#d9f1ff" transparent opacity={star.opacity} blending={AdditiveBlending} depthWrite={false} />
-          </mesh>
-        </Billboard>
+    <group ref={groupRef} scale={[400, 400, 400]} visible={false}>
+      <primitive object={scene} />
+    </group>
+  )
+}
+
+function SingleAvatar({ orb, audioLevel }: { orb: Orb, audioLevel: number }) {
+  const isConductor = orb.role === 'conductor'
+  
+  // Coordinate mapping
+  const mappedX = (orb.x - 50) * 0.05
+  const mappedY = -(orb.y - 50) * 0.05
+  const mappedZ = isConductor ? 2 : orb.role === 'speaker' ? 1 : 0
+  
+  const baseColor = new THREE.Color(
+    isConductor ? '#ffd700' : 
+    orb.role === 'speaker' ? '#9682ff' : 
+    '#ffffff'
+  )
+
+  const scale = 1 + audioLevel * 0.15
+  const innerDiscRef = useRef<THREE.Mesh>(null)
+
+  useFrame(({ clock }) => {
+    if (innerDiscRef.current) {
+      innerDiscRef.current.rotation.y = Math.sin(clock.elapsedTime * 0.5) * 0.15
+      innerDiscRef.current.position.y = Math.sin(clock.elapsedTime * 1.5) * 0.02
+    }
+  })
+
+  return (
+    <group position={[mappedX, mappedY, mappedZ]} scale={scale}>
+      <mesh>
+        <sphereGeometry args={[0.26, 64, 64]} />
+        <meshPhysicalMaterial 
+          color={isConductor ? '#fffae6' : orb.role === 'speaker' ? '#f0ebff' : '#ffffff'}
+          transmission={0.9}
+          thickness={0.8}
+          roughness={0.08}
+          ior={1.45}
+          reflectivity={0.5}
+          transparent={true}
+          opacity={0.4}
+        />
+      </mesh>
+
+      <Suspense fallback={<mesh><circleGeometry args={[0.16, 32]} /><meshBasicMaterial color={baseColor} transparent opacity={0.5} /></mesh>}>
+        <AvatarImage orb={orb} baseColor={baseColor} audioLevel={audioLevel} discRef={innerDiscRef} />
+      </Suspense>
+      
+      <Sparkles 
+        count={orb.isTalking ? 80 : 20}
+        scale={orb.isTalking ? 1.2 : 0.6}
+        size={orb.isTalking ? 3 : 1.5}
+        speed={0.4 + audioLevel}
+        opacity={0.3}
+        color={baseColor}
+      />
+    </group>
+  )
+}
+
+function AvatarImage({ orb, baseColor, audioLevel, discRef }: { orb: Orb, baseColor: THREE.Color, audioLevel: number, discRef: any }) {
+  const texture = useTexture(orb.image || 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=')
+  
+  return (
+      <mesh ref={discRef}>
+      <circleGeometry args={[0.16, 64]} />
+      <meshStandardMaterial 
+        map={orb.image ? texture : undefined}
+        color={orb.image ? '#ffffff' : baseColor}
+        emissive={baseColor}
+        emissiveIntensity={0.5 + audioLevel * 2.5}
+        side={THREE.DoubleSide}
+        transparent
+        opacity={0.88}
+      />
+    </mesh>
+  )
+}
+
+function UserAvatars({ orbs, audioLevels }: { orbs: Orb[], audioLevels: Record<string, number> }) {
+  return (
+    <group>
+      {orbs.map((orb) => (
+        <SingleAvatar key={orb.id} orb={orb} audioLevel={audioLevels[orb.id] ?? 0} />
       ))}
     </group>
   )
 }
 
-function SceneContents({ activeScene = 0 }: { activeScene?: number }) {
+function SceneContents({ activeScene = 0, orbs = [], audioLevels = {} }: { activeScene?: number, orbs: Orb[], audioLevels: Record<string, number> }) {
   const progressRef = useRef(0)
   const [loadedSecondStage, setLoadedSecondStage] = useState(false)
   const [loadedThirdStage, setLoadedThirdStage] = useState(false)
-  const touchLastYRef = useRef<number | null>(null)
 
   const ambientRef = useRef<AmbientLight>(null)
   const keyLightRef = useRef<PointLight>(null)
@@ -179,13 +287,8 @@ function SceneContents({ activeScene = 0 }: { activeScene?: number }) {
 
   useEffect(() => {
     const nextScene = clamp(Math.round(activeScene), 0, 2)
-
-    if (nextScene >= 1 && !loadedSecondStage) {
-      setLoadedSecondStage(true)
-    }
-    if (nextScene >= 2 && !loadedThirdStage) {
-      setLoadedThirdStage(true)
-    }
+    if (nextScene >= 1 && !loadedSecondStage) setLoadedSecondStage(true)
+    if (nextScene >= 2 && !loadedThirdStage) setLoadedThirdStage(true)
 
     gsap.to(progressRef, {
       current: nextScene,
@@ -194,67 +297,6 @@ function SceneContents({ activeScene = 0 }: { activeScene?: number }) {
       overwrite: 'auto',
     })
   }, [activeScene, loadedSecondStage, loadedThirdStage])
-
-  useEffect(() => {
-    const animateProgress = (deltaY: number) => {
-      const next = clamp(progressRef.current + deltaY * 0.0016, 0, 2)
-
-      gsap.to(progressRef, {
-        current: next,
-        duration: 0.9,
-        ease: 'power3.out',
-        overwrite: 'auto',
-        onUpdate: () => {
-          if (progressRef.current > 0.28 && !loadedSecondStage) {
-            setLoadedSecondStage(true)
-          }
-          if (progressRef.current > 1.05 && !loadedThirdStage) {
-            setLoadedThirdStage(true)
-          }
-        },
-      })
-    }
-
-    const handleWheel = (event: WheelEvent) => {
-      animateProgress(event.deltaY)
-    }
-
-    const handleTouchStart = (event: TouchEvent) => {
-      touchLastYRef.current = event.touches[0]?.clientY ?? null
-    }
-
-    const handleTouchMove = (event: TouchEvent) => {
-      const currentY = event.touches[0]?.clientY
-      if (currentY == null) return
-      const previousY = touchLastYRef.current
-      if (previousY == null) {
-        touchLastYRef.current = currentY
-        return
-      }
-
-      const delta = previousY - currentY
-      touchLastYRef.current = currentY
-      animateProgress(delta * 1.9)
-    }
-
-    const handleTouchEnd = () => {
-      touchLastYRef.current = null
-    }
-
-    window.addEventListener('wheel', handleWheel, { passive: true })
-    window.addEventListener('touchstart', handleTouchStart, { passive: true })
-    window.addEventListener('touchmove', handleTouchMove, { passive: true })
-    window.addEventListener('touchend', handleTouchEnd, { passive: true })
-    window.addEventListener('touchcancel', handleTouchEnd, { passive: true })
-
-    return () => {
-      window.removeEventListener('wheel', handleWheel)
-      window.removeEventListener('touchstart', handleTouchStart)
-      window.removeEventListener('touchmove', handleTouchMove)
-      window.removeEventListener('touchend', handleTouchEnd)
-      window.removeEventListener('touchcancel', handleTouchEnd)
-    }
-  }, [loadedSecondStage, loadedThirdStage])
 
   useFrame(({ camera }) => {
     const p = progressRef.current
@@ -310,11 +352,12 @@ function SceneContents({ activeScene = 0 }: { activeScene?: number }) {
 
       <Suspense fallback={null}>
         <HeroModel modelUrl={solarSystemModel} progressRef={progressRef} focus={0} spinSpeed={0.012} targetRadius={3.75} yOffset={-0.05} zOffset={0} />
+        <StarShader progressRef={progressRef} focus={0} targetRadius={3.75} yOffset={-0.05} zOffset={0} />
       </Suspense>
 
       {loadedSecondStage && (
         <Suspense fallback={null}>
-          <HeroModel modelUrl={starryNightModel} progressRef={progressRef} focus={1} spinSpeed={0.019} targetRadius={4.95} yOffset={-0.01} zOffset={1.1} />
+          <NebulaSkybox activeScene={activeScene} />
         </Suspense>
       )}
 
@@ -324,8 +367,10 @@ function SceneContents({ activeScene = 0 }: { activeScene?: number }) {
         </Suspense>
       )}
 
-      {activeScene !== 1 && <Stars radius={82} depth={26} count={2800} factor={2.2} saturation={0} fade speed={0.34} />}
-      <StarryConstellation active={activeScene === 1} />
+      <Stars radius={82} depth={26} count={2800} factor={2.2} saturation={0} fade speed={0.34} />
+      <Environment preset="night" />
+
+      <UserAvatars orbs={orbs} audioLevels={audioLevels} />
 
       <EffectComposer>
         <Bloom intensity={0.82} luminanceThreshold={0.2} luminanceSmoothing={0.78} mipmapBlur />
@@ -336,19 +381,23 @@ function SceneContents({ activeScene = 0 }: { activeScene?: number }) {
   )
 }
 
-export default function SpheresNebulaScene({ activeScene = 0 }: { activeScene?: number }) {
+interface SpheresNebulaSceneProps {
+  activeScene?: number
+  orbs?: Orb[]
+  audioLevels?: Record<string, number>
+}
+
+export default function SpheresNebulaScene({ activeScene = 0, orbs = [], audioLevels = {} }: SpheresNebulaSceneProps) {
   return (
     <div className="absolute inset-0 pointer-events-none">
-      <Canvas dpr={[1, 1.4]} camera={{ position: [0, 0, 7.1], fov: 42 }} gl={{ antialias: true, alpha: true }}>
+      <Canvas dpr={[1, 1.5]} camera={{ position: [0, 0, 7.1], fov: 42 }} gl={{ antialias: true, alpha: true }}>
         <color attach="background" args={['#020205']} />
-        <fog attach="fog" args={['#070512', 5, 19]} />
-        <SceneContents activeScene={activeScene} />
+        <SceneContents activeScene={activeScene} orbs={orbs} audioLevels={audioLevels} />
       </Canvas>
     </div>
   )
 }
 
 useGLTF.preload(solarSystemModel)
-useGLTF.preload(starryNightModel)
 useGLTF.preload(earthNightModel)
 useGLTF.preload(needSomeSpaceModel)

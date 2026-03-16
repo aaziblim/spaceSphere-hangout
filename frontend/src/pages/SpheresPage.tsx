@@ -59,9 +59,17 @@ function clamp(value: number, min: number, max: number) {
 }
 
 function getOrbRadius(role?: OrbRole): number {
-  if (role === 'conductor') return 10
-  if (role === 'speaker') return 9
-  return 7
+  if (role === 'conductor') return 8.4
+  if (role === 'speaker') return 7.4
+  return 5.9
+}
+
+function getCrowdScale(participantCount: number): number {
+  if (participantCount >= 20) return 0.68
+  if (participantCount >= 14) return 0.76
+  if (participantCount >= 10) return 0.84
+  if (participantCount >= 6) return 0.92
+  return 1
 }
 
 function GlassProfileCard({ username, onClose }: { username: string; onClose: () => void }) {
@@ -239,7 +247,6 @@ function useSpheresEngine(slug: string, currentUser: any, activeSpeakers: string
       radius: 8,
       isTalking: false,
       isSelf: true,
-      role: 'listener',
       handRaised: false,
       justJoinedAt: Date.now(),
     }
@@ -516,6 +523,17 @@ export default function SpheresPage() {
   const [emotePickerOpen, setEmotePickerOpen] = useState(false)
   const [requestsPanelOpen, setRequestsPanelOpen] = useState(false)
   const [roomNotice, setRoomNotice] = useState<string | null>(null)
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 })
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      const x = (e.clientX / window.innerWidth - 0.5) * 2
+      const y = (e.clientY / window.innerHeight - 0.5) * 2
+      setMousePos({ x, y })
+    }
+    window.addEventListener('mousemove', handleMouseMove)
+    return () => window.removeEventListener('mousemove', handleMouseMove)
+  }, [])
 
   const {
     orbs,
@@ -550,6 +568,7 @@ export default function SpheresPage() {
     spatialAudioAvailable,
     canPublishAudio,
     lastAudioError,
+    retryConnection,
   } = useLiveKitAudio({
     slug: slug!,
     enabled: !!user,
@@ -562,6 +581,11 @@ export default function SpheresPage() {
   const selectedUser = useMemo(() => orbs.find((orb) => orb.id === selectedOrbId), [orbs, selectedOrbId])
   const effectiveRole = (selfOrb?.role ?? role) as 'conductor' | 'speaker' | 'listener'
   const isConductor = effectiveRole === 'conductor'
+
+  const selfAudioLevel = selfOrb ? (audioLevels[selfOrb.id] ?? 0) : 0
+  const reactiveGlow = selfAudioLevel > 0
+    ? `inset 0 0 0 1px rgba(255,255,255,${0.2 + selfAudioLevel * 0.4}), 0 0 ${15 + selfAudioLevel * 25}px rgba(122,120,255,${0.3 + selfAudioLevel * 0.4})`
+    : `inset 0 1px 1px rgba(255,255,255,0.15), 0 8px 32px rgba(0,0,0,0.4)`
 
   const { data: requestsData } = useQuery({
     queryKey: ['sphereRequests', slug],
@@ -688,8 +712,9 @@ export default function SpheresPage() {
 
   const distanceStyled = useMemo(() => {
     const self = selfOrb
+    const crowdScale = getCrowdScale(orbs.length)
     return orbs.map((orb) => {
-      const base = getOrbRadius(orb.role)
+      const base = getOrbRadius(orb.role) * crowdScale
       const distance = self ? Math.hypot(orb.x - self.x, orb.y - self.y) : 0
       const normalized = clamp(distance / 75, 0, 1)
       const audioLevel = audioLevels[orb.id] ?? 0
@@ -731,21 +756,17 @@ export default function SpheresPage() {
     <div id="spheres-space-root" className="fixed inset-0 z-50 overflow-hidden bg-black font-sans selection:bg-purple-500/30">
       <div className="absolute inset-0 opacity-80 transition-opacity duration-700">
         <Suspense fallback={null}>
-          <SpheresNebulaScene activeScene={activeScene} />
+          <SpheresNebulaScene activeScene={activeScene} orbs={orbs} audioLevels={audioLevels} />
         </Suspense>
       </div>
 
-      <div className="absolute inset-0 bg-[#020205]/42 overflow-hidden transition-all duration-700">
+      <div className="absolute inset-0 bg-[#020205]/42 overflow-hidden transition-all duration-700 pointer-events-none">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_42%,rgba(38,50,88,0.18)_0%,rgba(3,5,13,0.82)_72%)]" />
         <div className="absolute inset-0 opacity-[0.035] bg-[url('https://grainy-gradients.vercel.app/noise.svg')]" />
       </div>
 
       <div className={`relative w-full h-full pointer-events-none transition-all duration-500 ${isDeafened ? 'opacity-55' : 'opacity-100'} ${selectedOrbId ? 'scale-95 blur-[1px] grayscale-[0.12]' : ''}`}>
         {distanceStyled.map(({ orb, base, depthScale, opacity, blur, saturation, zOrder, glow, audioLevel, normalized }) => {
-          const roleBorder = orb.role === 'conductor' ? '2px solid rgba(255, 215, 0, 0.44)' : '1px solid rgba(255, 255, 255, 0.17)'
-          const glowColor = orb.role === 'conductor' ? '255, 205, 70' : '122, 120, 255'
-          const aura = `0 0 ${Math.round(22 + glow * 58)}px rgba(${glowColor}, ${0.12 + glow * 0.45}), inset 0 0 ${Math.round(18 + glow * 28)}px rgba(255,255,255,${0.04 + audioLevel * 0.12})`
-
           return (
             <div
               key={orb.id}
@@ -756,62 +777,43 @@ export default function SpheresPage() {
                 onSelfPointerDown(event.pointerId)
                 void ensureAudioReady()
               }}
-              className={`absolute pointer-events-auto -translate-x-1/2 -translate-y-1/2 will-change-transform flex flex-col items-center gap-2.5 transition-all duration-300 ease-out cursor-pointer hover:scale-110 active:scale-95 ${orb.leaving ? 'animate-fade-out-fast' : ''}`}
+              // The hit area needs to be large enough to click the 3D orb behind it
+              className={`absolute pointer-events-auto -translate-x-1/2 -translate-y-1/2 will-change-transform flex flex-col items-center justify-end gap-3 transition-all duration-300 ease-out cursor-pointer hover:scale-110 active:scale-95 ${orb.leaving ? 'animate-fade-out-fast' : ''}`}
               style={{
                 left: `${orb.x}%`,
                 top: `${orb.y}%`,
                 width: `${base * 2}vw`,
                 height: `${base * 2}vw`,
-                maxWidth: orb.role === 'conductor' ? '150px' : '128px',
-                maxHeight: orb.role === 'conductor' ? '150px' : '128px',
-                minWidth: '62px',
-                minHeight: '62px',
+                maxWidth: orb.role === 'conductor' ? '112px' : '96px',
+                maxHeight: orb.role === 'conductor' ? '112px' : '96px',
+                minWidth: '56px',
+                minHeight: '56px',
                 zIndex: zOrder,
                 opacity,
                 filter: `blur(${blur}px) saturate(${saturation})`,
                 transform: `translate(-50%, -50%) scale(${depthScale})`,
               }}
             >
-              {orb.handRaised && <div className="absolute -top-2 -right-1 text-lg animate-bounce z-20">✋</div>}
+              {orb.handRaised && <div className="absolute -top-3 right-0 text-xl animate-bounce z-20 drop-shadow-lg">✋</div>}
 
-              <div
-                className="w-full h-full rounded-full relative backdrop-blur-xl transition-all duration-300 group animate-orb-enter"
-                style={{
-                  background:
-                    orb.isTalking && !isDeafened
-                      ? 'radial-gradient(circle at 30% 30%, rgba(186, 157, 255, 0.46), rgba(122, 120, 255, 0.12))'
-                      : orb.isSelf
-                        ? 'radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.06))'
-                        : 'radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.02))',
-                  border: roleBorder,
-                  boxShadow: aura,
-                }}
+              {/* Hovering Glass Name Badge placed below the invisible hit target */}
+              <div 
+                className={`flex items-center gap-1.5 px-3 py-1 mt-auto translate-y-8 rounded-full bg-black/40 backdrop-blur-md border border-white/10 shadow-lg transition-all duration-300 ${orb.isTalking && !isDeafened ? 'scale-105 border-white/30 bg-black/60 shadow-[0_0_15px_rgba(122,120,255,0.3)]' : ''}`}
               >
-                <div className="absolute inset-1.5 rounded-full overflow-hidden opacity-90 transition-opacity">
-                  {orb.image ? (
-                    <img src={orb.image} className={`w-full h-full object-cover transition-all duration-300 ${isDeafened && !orb.isSelf ? 'grayscale opacity-50' : ''}`} />
-                  ) : (
-                    <div className="w-full h-full bg-gradient-to-br from-white/10 to-transparent flex items-center justify-center text-white/40 font-bold text-lg">
-                      {orb.username[0].toUpperCase()}
-                    </div>
-                  )}
-                </div>
-                <div className="absolute top-3 left-3 w-1/3 h-1/4 bg-gradient-to-br from-white/40 to-transparent rounded-full blur-[2px]" style={{ opacity: 0.6 + (1 - normalized) * 0.2 }} />
-                {orb.isTalking && !isDeafened && (
-                  <div
-                    className="absolute inset-0 rounded-full border border-white/35"
-                    style={{
-                      opacity: 0.2 + audioLevel * 0.65,
-                      transform: `scale(${1.03 + audioLevel * 0.1})`,
-                      transition: 'all 120ms ease-out',
-                    }}
-                  />
+                {orb.role === 'conductor' && (
+                  <svg viewBox="0 0 24 24" className="w-3 h-3 text-yellow-500 fill-current drop-shadow-md">
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                  </svg>
+                )}
+                <span className={`text-[10px] uppercase tracking-widest font-semibold ${orb.isTalking && !isDeafened ? 'text-white' : 'text-white/60'}`}>
+                  {orb.username}
+                </span>
+                {orb.role === 'listener' && (
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3 h-3 text-white/30">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14c-2.21 0-4-1.79-4-4h2c0 1.1.9 2 2 2s2-.9 2-2c0-1.1-1.34-2-3-2-2.26 0-3-1.66-3-3 0-2.21 1.79-4 4-4s4 1.79 4 4h-2c0-1.1-.9-2-2-2s-2 .9-2 2c0 1.1 1.34 2 3 2 2.26 0 3 1.66 3 3 0 2.21-1.79 4-4 4z" />
+                  </svg>
                 )}
               </div>
-              <span className={`text-[10px] uppercase tracking-widest font-semibold transition-all duration-300 ${orb.isTalking && !isDeafened ? 'text-white translate-y-1' : 'text-white/45'}`}>
-                {orb.username}
-                {orb.role === 'conductor' && <span className="ml-1 text-yellow-400/80">*</span>}
-              </span>
             </div>
           )
         })}
@@ -827,8 +829,11 @@ export default function SpheresPage() {
         ))}
       </div>
 
-      <div className={`absolute top-10 left-10 z-30 pointer-events-none select-none transition-all duration-500 ${selectedOrbId ? 'opacity-0' : 'opacity-100'}`}>
-        <h1 className="text-3xl font-thin text-white tracking-[0.3em] uppercase opacity-90 drop-shadow-lg">Nebula</h1>
+      <div 
+        className={`absolute top-10 left-10 z-30 pointer-events-none select-none transition-all duration-500 ease-out ${selectedOrbId ? 'opacity-0' : 'opacity-100'}`}
+        style={{ transform: `perspective(1000px) rotateX(${-mousePos.y * 4}deg) rotateY(${mousePos.x * 4}deg) translateZ(10px)` }}
+      >
+        <h1 className="text-4xl font-sans tracking-[0.4em] font-light text-white/90 drop-shadow-[0_0_15px_rgba(255,255,255,0.3)]">NEBULA</h1>
         <div className="h-px w-12 bg-white/20 my-3" />
         <div className="flex items-center gap-2">
           <div className={`w-2 h-2 rounded-full ${isDeafened ? 'bg-red-500' : 'bg-green-500 animate-pulse'}`} />
@@ -840,7 +845,7 @@ export default function SpheresPage() {
         <p className="text-[10px] mt-1 text-white/35 tracking-[0.15em] uppercase">Room {connectionState}</p>
         <p className="text-[10px] mt-1 text-white/35 tracking-[0.15em] uppercase">Role {effectiveRole}</p>
         <p className="text-[10px] mt-1 text-white/35 tracking-[0.15em] uppercase">
-          Scene {activeScene === 0 ? 'Solar' : activeScene === 1 ? 'Starry' : 'Earth Night'}
+          Scene {activeScene === 0 ? 'Solar' : activeScene === 1 ? 'Nebula' : 'Earth Night'}
         </p>
       </div>
 
@@ -857,7 +862,7 @@ export default function SpheresPage() {
             <div className="flex items-center gap-1">
               {[
                 { id: 0, label: 'Solar' },
-                { id: 1, label: 'Starry' },
+                { id: 1, label: 'Nebula' },
                 { id: 2, label: 'Earth' },
               ].map((scene) => (
                 <button
@@ -960,8 +965,14 @@ export default function SpheresPage() {
         </div>
       )}
 
-      <div className={`absolute bottom-10 left-1/2 z-40 -translate-x-1/2 transition-all duration-500 ${selectedOrbId ? 'translate-y-32 opacity-0' : 'translate-y-0 opacity-100'}`}>
-        <div className="flex items-center gap-6 px-5 py-3 rounded-[2.5rem] bg-black/40 backdrop-blur-2xl border border-white/10 shadow-2xl transition-all hover:bg-black/50">
+      <div 
+        className={`absolute bottom-10 left-1/2 z-40 transition-all duration-[600ms] ease-[cubic-bezier(0.23,1,0.32,1)] ${selectedOrbId ? 'translate-y-32 opacity-0' : 'translate-y-0 opacity-100'}`}
+        style={{ transform: `perspective(1000px) translateX(-50%) rotateX(${-mousePos.y * 6}deg) rotateY(${mousePos.x * 6}deg) translateZ(20px)` }}
+      >
+        <div 
+          className="pointer-events-auto flex items-center gap-6 px-5 py-3 rounded-[2.5rem] bg-white/5 backdrop-blur-3xl transition-all duration-300"
+          style={{ boxShadow: reactiveGlow }}
+        >
           <button
             onClick={async () => {
               try {
@@ -972,7 +983,7 @@ export default function SpheresPage() {
               navigate(`/c/${slug}`)
             }}
             aria-label="Exit sphere"
-            className="w-12 h-12 rounded-full flex items-center justify-center text-white/60 hover:text-white hover:bg-red-500/20 border border-transparent transition-all"
+            className="w-12 h-12 rounded-full flex items-center justify-center text-white/60 hover:text-white hover:bg-red-500/20 border border-transparent transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] active:scale-90 hover:scale-[1.05]"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-5 h-5"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" /><polyline points="10 17 15 12 10 7" /><line x1="15" y1="12" x2="3" y2="12" /></svg>
           </button>
@@ -981,27 +992,50 @@ export default function SpheresPage() {
           <button
             onClick={() => setEmotePickerOpen((prev) => !prev)}
             aria-label="Toggle emote picker"
-            className={`w-12 h-12 rounded-full flex items-center justify-center border border-transparent transition-all active:scale-90 ${emotePickerOpen ? 'text-pink-300 bg-pink-500/20' : 'text-pink-400 hover:text-pink-300 hover:bg-pink-500/20'}`}
+            className={`w-12 h-12 rounded-full flex items-center justify-center border border-transparent transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] active:scale-90 hover:scale-[1.05] ${emotePickerOpen ? 'text-pink-300 bg-pink-500/20' : 'text-pink-400 hover:text-pink-300 hover:bg-pink-500/20'}`}
           >
             <svg viewBox="0 0 24 24" fill="currentColor" stroke="none" className="w-6 h-6"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></svg>
           </button>
 
           <button
-            onClick={() => {
+            onClick={async () => {
+              const unlocked = await ensureAudioReady()
+
               if (effectiveRole === 'listener') {
+                if (!audioReady || !unlocked || connectionState !== 'connected') {
+                  if (connectionState !== 'connected') {
+                    retryConnection()
+                  }
+                  setRoomNotice(connectionState === 'connected' ? 'Audio unlocked. You can now listen.' : 'Joining voice room...')
+                  return
+                }
+
                 handRaiseMutation.mutate()
                 return
               }
+
+              if (!unlocked) {
+                setRoomNotice('Tap again if your browser blocked audio.')
+                return
+              }
+
               if (connectionState !== 'connected') {
+                retryConnection()
                 setRoomNotice('Audio room is still connecting.')
                 return
               }
+
+              if (isDeafened) {
+                await toggleDeafen()
+                setRoomNotice('Audio undeafened.')
+              }
+
               void toggleMic()
             }}
             aria-label={effectiveRole === 'listener' ? 'Raise hand to speak' : isMuted ? 'Unmute microphone' : 'Mute microphone'}
-            className={`w-16 h-16 rounded-full flex items-center justify-center transition-all duration-300 shadow-xl relative ${effectiveRole === 'listener' ? 'bg-yellow-500/18 text-yellow-200 border border-yellow-400/30 hover:bg-yellow-500/24' : connectionState !== 'connected' ? 'bg-white/5 text-white/30 border border-white/10 cursor-not-allowed' : isMuted ? 'bg-white/5 text-white/50 border border-white/5 hover:bg-white/10' : 'bg-[var(--spheres-purple)] text-white scale-110 shadow-[0_0_40px_rgba(88,86,214,0.5)] border border-[#7A78FF]'}`}
+            className={`w-16 h-16 rounded-full flex items-center justify-center transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] shadow-xl relative active:scale-95 hover:scale-[1.05] ${effectiveRole === 'listener' ? 'bg-yellow-500/18 text-yellow-200 border border-yellow-400/30 hover:bg-yellow-500/24' : connectionState !== 'connected' ? 'bg-white/5 text-white/30 border border-white/10 cursor-not-allowed' : isMuted ? 'bg-white/5 text-white/50 border border-white/5 hover:bg-white/10' : 'bg-[var(--spheres-purple)] text-white scale-[1.05] hover:scale-[1.1] shadow-[0_0_40px_rgba(88,86,214,0.5)] border border-[#7A78FF]'}`}
           >
-            {canPublishAudio && !isMuted && <div className="absolute inset-0 rounded-full border border-white/30 animate-ping opacity-50" />}
+            {canPublishAudio && effectiveRole !== 'listener' && !isMuted && <div className="absolute inset-0 rounded-full border border-white/30 animate-ping opacity-50" />}
             {effectiveRole === 'listener' ? (
               <span className="text-2xl">✋</span>
             ) : isMuted ? (
@@ -1013,11 +1047,15 @@ export default function SpheresPage() {
 
           <button
             onClick={() => {
-              if (connectionState !== 'connected') return
+              if (connectionState !== 'connected') {
+                retryConnection()
+                setRoomNotice('Joining voice room...')
+                return
+              }
               void toggleDeafen()
             }}
             aria-label={isDeafened ? 'Undeafen audio' : 'Deafen audio'}
-            className={`w-12 h-12 flex items-center justify-center rounded-full transition-all border ${connectionState !== 'connected' ? 'bg-white/5 text-white/30 border-white/10 cursor-not-allowed' : isDeafened ? 'bg-red-500/20 text-red-400 border-red-500/30' : 'bg-white/5 text-white/60 hover:text-white hover:bg-white/10 border-transparent'}`}
+            className={`w-12 h-12 flex items-center justify-center rounded-full transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] active:scale-90 hover:scale-[1.05] border ${connectionState !== 'connected' ? 'bg-white/5 text-white/30 border-white/10 cursor-not-allowed' : isDeafened ? 'bg-red-500/20 text-red-400 border-red-500/30' : 'bg-white/5 text-white/60 hover:text-white hover:bg-white/10 border-transparent'}`}
           >
             {isDeafened ? (
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-6 h-6"><line x1="1" y1="1" x2="23" y2="23" /><path d="M11 5L6 9H2v6h4l5 4V5z" /></svg>

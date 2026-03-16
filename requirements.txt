@@ -64,4 +64,4 @@ WTForms==3.2.1
 whitenoise
 cloudinary
 django-cloudinary-storage
-livekit-api>=0.7.0
+livekit-api==1.1.0

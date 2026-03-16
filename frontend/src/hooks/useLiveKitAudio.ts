@@ -9,7 +9,7 @@ import {
   type RemoteParticipant,
   type RemoteTrack,
 } from 'livekit-client'
-import { joinSphere } from '../api'
+import { createSphere, fetchCsrf, joinSphere } from '../api'
 
 type LiveKitConnectionState = 'disconnected' | 'connecting' | 'connected' | 'reconnecting'
 
@@ -52,16 +52,53 @@ interface UseLiveKitAudioReturn {
   spatialAudioAvailable: boolean
   canPublishAudio: boolean
   lastAudioError: string | null
+  retryConnection: () => void
 }
 
 const MIN_GAIN = 0.28
 const MAX_GAIN = 1
 const MAX_AUDIO_DISTANCE = 15
-const X_SCALE = 0.18
-const Z_SCALE = 0.22
+const X_SCALE = 0.2
+const Z_SCALE = 0.25
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
+}
+
+function normalizeLiveKitUrl(rawUrl: string): string {
+  try {
+    const parsed = new URL(rawUrl)
+
+    // Avoid mixed-content failures in HTTPS contexts.
+    if (window.location.protocol === 'https:' && parsed.protocol === 'ws:') {
+      parsed.protocol = 'wss:'
+    }
+
+    // If backend returns localhost while UI is served from another host,
+    // prefer the current hostname for browser reachability.
+    if (parsed.hostname === 'localhost' && window.location.hostname && window.location.hostname !== 'localhost') {
+      parsed.hostname = window.location.hostname
+    }
+
+    return parsed.toString()
+  } catch {
+    return rawUrl
+  }
+}
+
+function getApiErrorInfo(error: unknown): { status?: number; message?: string } {
+  if (typeof error !== 'object' || !error || !('response' in error)) {
+    if (error instanceof Error && error.message) {
+      return { message: error.message }
+    }
+    return {}
+  }
+
+  const response = (error as { response?: { status?: number; data?: { error?: string; detail?: string; message?: string } } }).response
+  return {
+    status: response?.status,
+    message: response?.data?.error ?? response?.data?.detail ?? response?.data?.message,
+  }
 }
 
 export function useLiveKitAudio({
@@ -79,6 +116,7 @@ export function useLiveKitAudio({
   const [audioLevels, setAudioLevels] = useState<Record<string, number>>({})
   const [audioReady, setAudioReady] = useState(false)
   const [lastAudioError, setLastAudioError] = useState<string | null>(null)
+  const [connectNonce, setConnectNonce] = useState(0)
 
   const roomRef = useRef<Room | null>(null)
   const localTrackRef = useRef<LocalTrack | null>(null)
@@ -115,19 +153,20 @@ export function useLiveKitAudio({
     participantGraphsRef.current.forEach((graph, participantId) => {
       const position = positionMapRef.current.get(participantId)
       if (!position || !selfPosition) {
-        if (!graph.sourceNode) {
-          graph.audioElement.volume = deafenedRef.current ? 0 : 1
+        const gain = deafenedRef.current ? 0 : 1
+        if (graph.gainNode && context) {
+          graph.gainNode.gain.setTargetAtTime(gain, context.currentTime, 0.09)
+        } else {
+          graph.audioElement.volume = gain
         }
         return
       }
 
       const relativeX = (position.x - selfPosition.x) * X_SCALE
       const relativeZ = (position.y - selfPosition.y) * Z_SCALE
-      const distance = Math.hypot(relativeX, relativeZ)
-      const normalizedDistance = clamp(distance / MAX_AUDIO_DISTANCE, 0, 1)
-      const gain = deafenedRef.current
-        ? 0
-        : MIN_GAIN + (MAX_GAIN - MIN_GAIN) * Math.pow(1 - normalizedDistance, 1.35)
+      
+      // Let PannerNode handle spatial attenuation natively
+      const gain = deafenedRef.current ? 0 : 1
 
       if (graph.pannerNode && context) {
         graph.pannerNode.positionX.setTargetAtTime(relativeX, context.currentTime, 0.08)
@@ -157,9 +196,9 @@ export function useLiveKitAudio({
       analyserNode.smoothingTimeConstant = 0.84
       pannerNode.panningModel = 'HRTF'
       pannerNode.distanceModel = 'inverse'
-      pannerNode.refDistance = 1.4
-      pannerNode.maxDistance = 18
-      pannerNode.rolloffFactor = 1.35
+      pannerNode.refDistance = 1.0
+      pannerNode.maxDistance = 25
+      pannerNode.rolloffFactor = 1.5
       pannerNode.coneInnerAngle = 360
       pannerNode.coneOuterAngle = 0
       gainNode.gain.value = deafenedRef.current ? 0 : 1
@@ -213,6 +252,11 @@ export function useLiveKitAudio({
       if (context.state !== 'running') {
         await context.resume()
       }
+
+      if (roomRef.current) {
+        await roomRef.current.startAudio().catch(() => {})
+      }
+
       setAudioReady(context.state === 'running')
       participantGraphsRef.current.forEach((graph) => attachSpatialGraph(graph))
       syncSpatialAudio()
@@ -281,7 +325,33 @@ export function useLiveKitAudio({
       }
 
       try {
-        const { token, livekit_url, role: serverRole } = await joinSphere(slug)
+        // Ensure CSRF cookie/header path is warmed up for POST join/create calls.
+        await fetchCsrf().catch(() => {})
+
+        let joinPayload
+        try {
+          joinPayload = await joinSphere(slug)
+        } catch (joinError) {
+          const joinInfo = getApiErrorInfo(joinError)
+
+          if (joinInfo.status === 404) {
+            try {
+              await createSphere(slug)
+              joinPayload = await joinSphere(slug)
+            } catch {
+              throw joinError
+            }
+          } else if (joinInfo.status === 403) {
+            // Direct entry to the room can miss CSRF initialization in some sessions.
+            // Refresh once and retry before surfacing a hard 403.
+            await fetchCsrf().catch(() => {})
+            joinPayload = await joinSphere(slug)
+          } else {
+            throw joinError
+          }
+        }
+
+        const { token, livekit_url, role: serverRole } = joinPayload
         if (cancelled) return
 
         setRole(serverRole)
@@ -376,7 +446,8 @@ export function useLiveKitAudio({
           }
         })
 
-        await room.connect(livekit_url, token)
+        const normalizedUrl = normalizeLiveKitUrl(livekit_url)
+        await room.connect(normalizedUrl, token)
         if (cancelled) {
           room.disconnect()
           return
@@ -386,12 +457,20 @@ export function useLiveKitAudio({
         setConnectionState('connected')
         setParticipantCount(room.numParticipants + 1)
         setLastAudioError(null)
+        await room.startAudio().catch(() => {})
         await ensureAudioReady()
       } catch (error) {
         console.error('LiveKit connection failed:', error)
         if (!cancelled) {
           setConnectionState('disconnected')
-          setLastAudioError('Voice server unavailable. Retrying...')
+
+          const errorInfo = getApiErrorInfo(error)
+          if (errorInfo.status && errorInfo.status >= 400 && errorInfo.status < 500) {
+            setLastAudioError(errorInfo.message ?? 'This sphere is not ready for audio yet.')
+            return
+          }
+
+          setLastAudioError(errorInfo.message ?? 'Voice transport unavailable. Retrying...')
           reconnectTimeoutRef.current = window.setTimeout(() => {
             connect().catch(() => {})
           }, 3000)
@@ -429,13 +508,18 @@ export function useLiveKitAudio({
       setAudioReady(false)
       setConnectionState('disconnected')
     }
-  }, [slug, enabled, onActiveSpeakersChanged, ensureAudioReady, attachSpatialGraph, syncSpatialAudio])
+  }, [slug, enabled, connectNonce, onActiveSpeakersChanged, ensureAudioReady, attachSpatialGraph, syncSpatialAudio])
 
   const toggleMic = useCallback(async () => {
     await ensureAudioReady()
 
     if (role === 'listener') {
       setLastAudioError('Raise your hand to get invited to speak.')
+      return
+    }
+
+    if (isDeafened) {
+      setLastAudioError('You are deafened. Undeafen to speak.')
       return
     }
 
@@ -461,21 +545,46 @@ export function useLiveKitAudio({
       const tracks = await room.localParticipant.createTracks({ audio: true })
       const audioTrack = tracks.find((track) => track.kind === Track.Kind.Audio)
       if (audioTrack) {
+        // Publish will fail here if the backend hasn't updated the LiveKit permissions yet.
         await room.localParticipant.publishTrack(audioTrack)
         localTrackRef.current = audioTrack
       }
       setIsMuted(false)
     } catch (error) {
-      console.error('Mic access denied:', error)
-      setLastAudioError('Could not access microphone.')
-      alert('Could not access microphone.')
+      console.error('Mic access denied or publish failed:', error)
+      setLastAudioError('Publish rejected. Waiting for server permission...')
+      // If we failed to publish due to lingering listener permissions from LiveKit, reset.
+      setIsMuted(true)
     }
-  }, [connectionState, ensureAudioReady, isMuted, role])
+  }, [connectionState, ensureAudioReady, isMuted, isDeafened, role])
 
   const toggleDeafen = useCallback(async () => {
     await ensureAudioReady()
-    setIsDeafened((previous) => !previous)
-  }, [ensureAudioReady])
+    setIsDeafened((previous) => {
+      const nextDeafened = !previous
+      
+      // If we are deafening, we should also mute the microphone
+      if (nextDeafened && !isMuted) {
+        if (localTrackRef.current) {
+          const room = roomRef.current
+          if (room) {
+            room.localParticipant.unpublishTrack(localTrackRef.current).catch(console.error)
+          }
+          localTrackRef.current.stop()
+          localTrackRef.current = null
+        }
+        setIsMuted(true)
+      }
+      
+      return nextDeafened
+    })
+  }, [ensureAudioReady, isMuted])
+
+  const retryConnection = useCallback(() => {
+    setLastAudioError(null)
+    setConnectionState('connecting')
+    setConnectNonce((value) => value + 1)
+  }, [])
 
   return {
     isMuted,
@@ -491,5 +600,6 @@ export function useLiveKitAudio({
     spatialAudioAvailable: spatialAudioSupportedRef.current,
     canPublishAudio: role !== 'listener',
     lastAudioError,
+    retryConnection,
   }
 }

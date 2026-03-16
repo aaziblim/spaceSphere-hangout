@@ -1734,18 +1734,12 @@ def sphere_join_view(request, slug):
     from livekit.api import AccessToken, VideoGrants
 
     room_name = f'sphere_{slug}'
-    token = AccessToken(
-        api_key=django_settings.LIVEKIT_API_KEY,
-        api_secret=django_settings.LIVEKIT_API_SECRET,
-    )
-    token.identity = str(request.user.id)
-    token.name = request.user.username
 
     profile_image = None
     if hasattr(request.user, 'profile') and request.user.profile.image:
         profile_image = request.build_absolute_uri(request.user.profile.image.url)
 
-    token.metadata = str({
+    metadata = str({
         'username': request.user.username,
         'profile_image': profile_image,
         'community_role': membership.role,
@@ -1757,7 +1751,17 @@ def sphere_join_view(request, slug):
         can_publish=sphere_role in ('conductor', 'speaker'),
         can_subscribe=True,
     )
-    token.add_grant(grant)
+
+    token = (
+        AccessToken(
+            api_key=django_settings.LIVEKIT_API_KEY,
+            api_secret=django_settings.LIVEKIT_API_SECRET,
+        )
+        .with_identity(str(request.user.id))
+        .with_name(request.user.username)
+        .with_metadata(metadata)
+        .with_grants(grant)
+    )
 
     return Response({
         'token': token.to_jwt(),
@@ -1956,19 +1960,29 @@ def sphere_promote_view(request, slug):
     # Update LiveKit permissions to allow publishing
     try:
         from livekit.api import LiveKitAPI
+        from livekit.protocol.room import UpdateParticipantRequest
+        from livekit.protocol.models import ParticipantPermission
         import asyncio
-        lk = LiveKitAPI(
-            url=django_settings.LIVEKIT_URL.replace('ws://', 'http://').replace('wss://', 'https://'),
-            api_key=django_settings.LIVEKIT_API_KEY,
-            api_secret=django_settings.LIVEKIT_API_SECRET,
-        )
-        asyncio.run(lk.room.update_participant(
-            room=f'sphere_{slug}',
-            identity=str(target_user_id),
-            permission={'can_publish': True, 'can_subscribe': True},
-        ))
-    except Exception:
-        pass  # LiveKit update is best-effort
+        
+        async def update_permissions():
+            api = LiveKitAPI(
+                url=django_settings.LIVEKIT_URL.replace('ws://', 'http://').replace('wss://', 'https://'),
+                api_key=django_settings.LIVEKIT_API_KEY,
+                api_secret=django_settings.LIVEKIT_API_SECRET,
+            )
+            try:
+                req = UpdateParticipantRequest(
+                    room=f'sphere_{slug}',
+                    identity=str(target_user_id),
+                    permission=ParticipantPermission(can_publish=True, can_subscribe=True)
+                )
+                await api.room.update_participant(req)
+            finally:
+                await api.aclose()
+        
+        asyncio.run(update_permissions())
+    except Exception as e:
+        print(f"LiveKit permission error: {e}")
 
     # Broadcast role change
     try:
@@ -2028,19 +2042,29 @@ def sphere_demote_view(request, slug):
     # Revoke LiveKit publish permission
     try:
         from livekit.api import LiveKitAPI
+        from livekit.protocol.room import UpdateParticipantRequest
+        from livekit.protocol.models import ParticipantPermission
         import asyncio
-        lk = LiveKitAPI(
-            url=django_settings.LIVEKIT_URL.replace('ws://', 'http://').replace('wss://', 'https://'),
-            api_key=django_settings.LIVEKIT_API_KEY,
-            api_secret=django_settings.LIVEKIT_API_SECRET,
-        )
-        asyncio.run(lk.room.update_participant(
-            room=f'sphere_{slug}',
-            identity=str(target_user_id),
-            permission={'can_publish': False, 'can_subscribe': True},
-        ))
-    except Exception:
-        pass
+        
+        async def revoke_permissions():
+            api = LiveKitAPI(
+                url=django_settings.LIVEKIT_URL.replace('ws://', 'http://').replace('wss://', 'https://'),
+                api_key=django_settings.LIVEKIT_API_KEY,
+                api_secret=django_settings.LIVEKIT_API_SECRET,
+            )
+            try:
+                req = UpdateParticipantRequest(
+                    room=f'sphere_{slug}',
+                    identity=str(target_user_id),
+                    permission=ParticipantPermission(can_publish=False, can_subscribe=True)
+                )
+                await api.room.update_participant(req)
+            finally:
+                await api.aclose()
+                
+        asyncio.run(revoke_permissions())
+    except Exception as e:
+        print(f"LiveKit permission error: {e}")
 
     # Broadcast role change
     try:
