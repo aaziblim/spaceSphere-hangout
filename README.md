@@ -14,7 +14,7 @@ Spherespace is a real-time social platform for creators and communities. It comb
 | Gamification | Achievement badges, activity streaks, karma system |
 | Creators | Verified badges, analytics dashboard, payment integration |
 | Live Streaming | WebSocket chat, screen sharing, viewer moderation, stream categories, post-stream summary |
-| Audio Spaces | Real-time spatial audio rooms with physics-based orbs, Conductor role, guest approval, and emote bursts |
+| Audio Spaces | Real-time spatial audio rooms with Apple-tier **3D Spatial Avatars**, LiveKit SFU, Conductor roles, and guest approval |
 | Payments | Paystack integration, subscription tiers (Blue, Premium, Organization), webhooks |
 | Moderation | Block users, mute users, report posts/comments/users with email notification to admins |
 | UI/UX | Dark/light/system themes, skeleton loading, micro-interactions, custom 404 page |
@@ -215,7 +215,14 @@ sequenceDiagram
 
 ## Spheres (Audio Spaces) Architecture
 
-Spheres are live audio rooms tied to communities. They use **LiveKit SFU** for audio transport and **Django Channels** for real-time orb physics, emote bursts, and moderation events.
+Spheres are immersive 3D audio rooms tied to communities. They use **LiveKit SFU** for ultra-low latency audio transport and **React Three Fiber** for a premium spatial environment.
+
+### 3D Spatial Avatars (Spatial UI)
+The participant representation has been elevated to a "Spatial UI" standard:
+* **The Persona**: Users are encapsulated in high-refraction glass orbs (refractive index 1.45) that bend the background nebula light.
+* **The Holographic Disc**: Profile images are suspended inside the glass as floating, rotating holographic planes.
+* **Stellar Aura**: Dynamic, audio-reactive particle systems (Point Clouds) that pulse and scale with the user's voice intensity.
+* **Physics Engine**: Native orb collisions and spatial positioning driven by Django Channels.
 
 ### Roles
 
@@ -343,7 +350,14 @@ python manage.py createsuperuser
 
 # Start server
 python manage.py runserver
+
+#### Local LiveKit Server (Audio)
+To enable real-time audio in Spheres, you must run the LiveKit server:
+```bash
+# Windows (using the provided tool)
+./tools/livekit/livekit-server.exe --dev
 ```
+Ensure your `.env` has the correct `LIVEKIT_URL`, `LIVEKIT_API_KEY`, and `LIVEKIT_API_SECRET`.
 
 #### Frontend Setup
 
