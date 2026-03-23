@@ -41,39 +41,42 @@ export function StreamSummaryModal({
         <div className="p-6">
           {/* Header */}
           <div className="text-center mb-6">
-            <div className="mx-auto w-14 h-14 rounded-full flex items-center justify-center mb-4 bg-green-500/10 text-green-500">
+            <div
+              className="mx-auto w-14 h-14 rounded-full flex items-center justify-center mb-4"
+              style={{ backgroundColor: 'var(--success-alpha)', color: 'var(--success)' }}
+            >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-7 h-7">
                 <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
-            <h3 className="text-xl font-bold text-white">Stream Ended</h3>
-            <p className="text-white/50 text-sm mt-1">Here's how your stream performed</p>
+            <h3 className="text-xl font-bold" style={{ color: 'var(--text-primary)' }}>Stream Ended</h3>
+            <p className="text-sm mt-1" style={{ color: 'var(--text-tertiary)' }}>Here's how your stream performed</p>
           </div>
 
           {/* Stats Grid */}
           <div className="grid grid-cols-2 gap-3 mb-6">
-            <div className="bg-white/5 rounded-xl p-4 text-center">
-              <div className="text-2xl font-bold text-white">{formatDuration(stats.duration)}</div>
-              <div className="text-xs text-white/50 mt-1">Duration</div>
+            <div className="rounded-xl p-4 text-center" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
+              <div className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>{formatDuration(stats.duration)}</div>
+              <div className="text-xs mt-1" style={{ color: 'var(--text-tertiary)' }}>Duration</div>
             </div>
-            <div className="bg-white/5 rounded-xl p-4 text-center">
-              <div className="text-2xl font-bold text-white">{stats.peakViewers}</div>
-              <div className="text-xs text-white/50 mt-1">Peak Viewers</div>
+            <div className="rounded-xl p-4 text-center" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
+              <div className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>{stats.peakViewers}</div>
+              <div className="text-xs mt-1" style={{ color: 'var(--text-tertiary)' }}>Peak Viewers</div>
             </div>
-            <div className="bg-white/5 rounded-xl p-4 text-center">
-              <div className="text-2xl font-bold text-white">{stats.totalLikes}</div>
-              <div className="text-xs text-white/50 mt-1">Likes</div>
+            <div className="rounded-xl p-4 text-center" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
+              <div className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>{stats.totalLikes}</div>
+              <div className="text-xs mt-1" style={{ color: 'var(--text-tertiary)' }}>Likes</div>
             </div>
-            <div className="bg-white/5 rounded-xl p-4 text-center">
-              <div className="text-2xl font-bold text-white">{stats.totalMessages}</div>
-              <div className="text-xs text-white/50 mt-1">Messages</div>
+            <div className="rounded-xl p-4 text-center" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
+              <div className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>{stats.totalMessages}</div>
+              <div className="text-xs mt-1" style={{ color: 'var(--text-tertiary)' }}>Messages</div>
             </div>
           </div>
 
           {/* Action Buttons */}
           {hasRecording ? (
             <div className="space-y-3">
-              <p className="text-center text-sm text-white/60 mb-2">
+              <p className="text-center text-sm mb-2" style={{ color: 'var(--text-secondary)' }}>
                 Save the recording as a post for others to watch?
               </p>
               <button
@@ -93,7 +96,8 @@ export function StreamSummaryModal({
               <button
                 onClick={onDiscard}
                 disabled={isSaving}
-                className="w-full py-3.5 rounded-xl font-medium text-white/70 hover:bg-white/5 hover:text-white transition-colors disabled:opacity-50"
+                className="w-full py-3.5 rounded-xl font-medium transition-colors hover:bg-[var(--bg-tertiary)] disabled:opacity-50"
+                style={{ color: 'var(--text-secondary)' }}
               >
                 Discard Recording
               </button>

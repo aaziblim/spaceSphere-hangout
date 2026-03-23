@@ -253,7 +253,19 @@ function useSpheresEngine(slug: string, currentUser: any, activeSpeakers: string
     setOrbs([myOrb])
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const wsUrl = `${protocol}//${window.location.host}/ws/spheres/${slug}/`
+    const configuredWsBase = (import.meta.env.VITE_WS_BASE as string | undefined)?.trim()
+
+    const deriveBackendHost = () => {
+      if (configuredWsBase) {
+        return configuredWsBase.replace(/^https?:\/\//, '').replace(/^wss?:\/\//, '').replace(/\/$/, '')
+      }
+      if (window.location.port === '5173') {
+        return `${window.location.hostname}:8000`
+      }
+      return window.location.host
+    }
+
+    const wsUrl = `${protocol}//${deriveBackendHost()}/ws/spheres/${slug}/`
     const ws = new WebSocket(wsUrl)
 
     ws.onopen = () => {
@@ -524,15 +536,28 @@ export default function SpheresPage() {
   const [requestsPanelOpen, setRequestsPanelOpen] = useState(false)
   const [roomNotice, setRoomNotice] = useState<string | null>(null)
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 })
+  const mouseMoveRafRef = useRef<number | null>(null)
+  const pendingMousePosRef = useRef({ x: 0, y: 0 })
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       const x = (e.clientX / window.innerWidth - 0.5) * 2
       const y = (e.clientY / window.innerHeight - 0.5) * 2
-      setMousePos({ x, y })
+      pendingMousePosRef.current = { x, y }
+      if (mouseMoveRafRef.current !== null) return
+      mouseMoveRafRef.current = window.requestAnimationFrame(() => {
+        mouseMoveRafRef.current = null
+        setMousePos(pendingMousePosRef.current)
+      })
     }
     window.addEventListener('mousemove', handleMouseMove)
-    return () => window.removeEventListener('mousemove', handleMouseMove)
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      if (mouseMoveRafRef.current !== null) {
+        window.cancelAnimationFrame(mouseMoveRafRef.current)
+        mouseMoveRafRef.current = null
+      }
+    }
   }, [])
 
   const {
@@ -762,7 +787,7 @@ export default function SpheresPage() {
 
       <div className="absolute inset-0 bg-[#020205]/42 overflow-hidden transition-all duration-700 pointer-events-none">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_42%,rgba(38,50,88,0.18)_0%,rgba(3,5,13,0.82)_72%)]" />
-        <div className="absolute inset-0 opacity-[0.035] bg-[url('https://grainy-gradients.vercel.app/noise.svg')]" />
+        <div className="absolute inset-0 opacity-[0.035] bg-[radial-gradient(rgba(255,255,255,0.15)_0.5px,transparent_0.5px)] [background-size:3px_3px]" />
       </div>
 
       <div className={`relative w-full h-full pointer-events-none transition-all duration-500 ${isDeafened ? 'opacity-55' : 'opacity-100'} ${selectedOrbId ? 'scale-95 blur-[1px] grayscale-[0.12]' : ''}`}>
@@ -795,25 +820,6 @@ export default function SpheresPage() {
               }}
             >
               {orb.handRaised && <div className="absolute -top-3 right-0 text-xl animate-bounce z-20 drop-shadow-lg">✋</div>}
-
-              {/* Hovering Glass Name Badge placed below the invisible hit target */}
-              <div 
-                className={`flex items-center gap-1.5 px-3 py-1 mt-auto translate-y-8 rounded-full bg-black/40 backdrop-blur-md border border-white/10 shadow-lg transition-all duration-300 ${orb.isTalking && !isDeafened ? 'scale-105 border-white/30 bg-black/60 shadow-[0_0_15px_rgba(122,120,255,0.3)]' : ''}`}
-              >
-                {orb.role === 'conductor' && (
-                  <svg viewBox="0 0 24 24" className="w-3 h-3 text-yellow-500 fill-current drop-shadow-md">
-                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                  </svg>
-                )}
-                <span className={`text-[10px] uppercase tracking-widest font-semibold ${orb.isTalking && !isDeafened ? 'text-white' : 'text-white/60'}`}>
-                  {orb.username}
-                </span>
-                {orb.role === 'listener' && (
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3 h-3 text-white/30">
-                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14c-2.21 0-4-1.79-4-4h2c0 1.1.9 2 2 2s2-.9 2-2c0-1.1-1.34-2-3-2-2.26 0-3-1.66-3-3 0-2.21 1.79-4 4-4s4 1.79 4 4h-2c0-1.1-.9-2-2-2s-2 .9-2 2c0 1.1 1.34 2 3 2 2.26 0 3 1.66 3 3 0 2.21-1.79 4-4 4z" />
-                  </svg>
-                )}
-              </div>
             </div>
           )
         })}
@@ -833,11 +839,11 @@ export default function SpheresPage() {
         className={`absolute top-10 left-10 z-30 pointer-events-none select-none transition-all duration-500 ease-out ${selectedOrbId ? 'opacity-0' : 'opacity-100'}`}
         style={{ transform: `perspective(1000px) rotateX(${-mousePos.y * 4}deg) rotateY(${mousePos.x * 4}deg) translateZ(10px)` }}
       >
-        <h1 className="text-4xl font-sans tracking-[0.4em] font-light text-white/90 drop-shadow-[0_0_15px_rgba(255,255,255,0.3)]">NEBULA</h1>
+        <h1 className="text-4xl font-sans tracking-[0.4em] font-light text-white/90 drop-shadow-[0_0_15px_rgba(255,255,255,0.3)]">SPHERES</h1>
         <div className="h-px w-12 bg-white/20 my-3" />
         <div className="flex items-center gap-2">
           <div className={`w-2 h-2 rounded-full ${isDeafened ? 'bg-red-500' : 'bg-green-500 animate-pulse'}`} />
-          <p className="text-[10px] text-white/50 tracking-[0.2em]">{participantCount} IN NEBULA</p>
+          <p className="text-[10px] text-white/50 tracking-[0.2em]">{participantCount} LISTENING</p>
         </div>
         <p className="text-[10px] mt-2 text-white/35 tracking-[0.15em] uppercase">
           {spatialAudioAvailable ? (audioReady ? 'Spatial Audio Active' : 'Tap mic or deafen to activate audio') : 'Browser fallback audio'}
@@ -845,7 +851,7 @@ export default function SpheresPage() {
         <p className="text-[10px] mt-1 text-white/35 tracking-[0.15em] uppercase">Room {connectionState}</p>
         <p className="text-[10px] mt-1 text-white/35 tracking-[0.15em] uppercase">Role {effectiveRole}</p>
         <p className="text-[10px] mt-1 text-white/35 tracking-[0.15em] uppercase">
-          Scene {activeScene === 0 ? 'Solar' : activeScene === 1 ? 'Nebula' : 'Earth Night'}
+          Scene {activeScene === 0 ? 'Solar' : activeScene === 1 ? 'Nebula Glow' : 'Earth Night'}
         </p>
       </div>
 
@@ -862,8 +868,8 @@ export default function SpheresPage() {
             <div className="flex items-center gap-1">
               {[
                 { id: 0, label: 'Solar' },
-                { id: 1, label: 'Nebula' },
-                { id: 2, label: 'Earth' },
+                { id: 1, label: 'Nebula Glow' },
+                { id: 2, label: 'Earth Night' },
               ].map((scene) => (
                 <button
                   key={scene.id}

@@ -128,6 +128,11 @@ export function useLiveKitAudio({
   const positionMapRef = useRef<Map<string, SpatialParticipantPosition>>(new Map())
   const audioLevelsRef = useRef<Record<string, number>>({})
   const spatialAudioSupportedRef = useRef(false)
+  const syncSpatialRafRef = useRef<number | null>(null)
+  const syncSpatialRequestedRef = useRef(false)
+  const lastAnalyserAtRef = useRef<number>(0)
+  const reconnectAttemptsRef = useRef(0)
+  const maxReconnectAttempts = 5
 
   deafenedRef.current = isDeafened
 
@@ -182,6 +187,18 @@ export function useLiveKitAudio({
     })
   }, [])
 
+  // Coalesce potentially-frequent spatial sync calls (e.g. when orb positions update).
+  const scheduleSyncSpatialAudio = useCallback(() => {
+    if (syncSpatialRequestedRef.current) return
+    syncSpatialRequestedRef.current = true
+
+    syncSpatialRafRef.current = window.requestAnimationFrame(() => {
+      syncSpatialRequestedRef.current = false
+      syncSpatialRafRef.current = null
+      syncSpatialAudio()
+    })
+  }, [syncSpatialAudio])
+
   const attachSpatialGraph = useCallback((graph: ParticipantAudioGraph) => {
     const context = audioContextRef.current
     if (!context || graph.sourceNode) return
@@ -214,11 +231,11 @@ export function useLiveKitAudio({
       graph.pannerNode = pannerNode
       graph.dataArray = new Uint8Array(analyserNode.frequencyBinCount)
 
-      syncSpatialAudio()
+      scheduleSyncSpatialAudio()
     } catch (error) {
       console.error('Could not create spatial audio graph:', error)
     }
-  }, [syncSpatialAudio])
+  }, [scheduleSyncSpatialAudio])
 
   const ensureAudioReady = useCallback(async () => {
     const AudioContextCtor = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
@@ -259,14 +276,14 @@ export function useLiveKitAudio({
 
       setAudioReady(context.state === 'running')
       participantGraphsRef.current.forEach((graph) => attachSpatialGraph(graph))
-      syncSpatialAudio()
+      scheduleSyncSpatialAudio()
       return context.state === 'running'
     } catch (error) {
       console.error('AudioContext resume blocked:', error)
       setAudioReady(false)
       return false
     }
-  }, [attachSpatialGraph, syncSpatialAudio])
+  }, [attachSpatialGraph, scheduleSyncSpatialAudio])
 
   useEffect(() => {
     const nextMap = new Map<string, SpatialParticipantPosition>()
@@ -274,15 +291,25 @@ export function useLiveKitAudio({
       nextMap.set(position.id, position)
     })
     positionMapRef.current = nextMap
-    syncSpatialAudio()
-  }, [spatialPositions, syncSpatialAudio])
+    scheduleSyncSpatialAudio()
+  }, [spatialPositions, scheduleSyncSpatialAudio])
 
   useEffect(() => {
-    syncSpatialAudio()
-  }, [isDeafened, syncSpatialAudio])
+    scheduleSyncSpatialAudio()
+  }, [isDeafened, scheduleSyncSpatialAudio])
 
   useEffect(() => {
     const tick = () => {
+      // Reduce CPU load: analyser work + React state updates are expensive.
+      // We only do heavy analyser reads at a fixed interval.
+      const now = typeof performance !== 'undefined' ? performance.now() : Date.now()
+      const AUDIO_ANALYSER_INTERVAL_MS = 40
+      if (now - lastAnalyserAtRef.current < AUDIO_ANALYSER_INTERVAL_MS) {
+        analyserFrameRef.current = window.requestAnimationFrame(tick)
+        return
+      }
+      lastAnalyserAtRef.current = now
+
       const nextLevels: Record<string, number> = {}
 
       participantGraphsRef.current.forEach((graph, participantId) => {
@@ -292,11 +319,13 @@ export function useLiveKitAudio({
         }
 
         graph.analyserNode.getByteFrequencyData(graph.dataArray)
-        const sum = graph.dataArray.reduce((total, value) => total + value, 0)
+        let sum = 0
+        for (let i = 0; i < graph.dataArray.length; i++) sum += graph.dataArray[i]
         const average = graph.dataArray.length ? sum / graph.dataArray.length : 0
         const normalized = clamp((average - 12) / 72, 0, 1)
         const previous = audioLevelsRef.current[participantId] ?? 0
-        nextLevels[participantId] = previous * 0.72 + normalized * 0.28
+        // Faster response than the previous smoothing (feels more "alive" in the nebula).
+        nextLevels[participantId] = previous * 0.65 + normalized * 0.35
       })
 
       audioLevelsRef.current = nextLevels
@@ -426,7 +455,7 @@ export function useLiveKitAudio({
           if (audioContextRef.current) {
             attachSpatialGraph(graph)
           }
-          syncSpatialAudio()
+          scheduleSyncSpatialAudio()
         })
 
         room.on(RoomEvent.TrackUnsubscribed, (track, _publication, participant: RemoteParticipant) => {
@@ -455,6 +484,7 @@ export function useLiveKitAudio({
 
         roomRef.current = room
         setConnectionState('connected')
+        reconnectAttemptsRef.current = 0
         setParticipantCount(room.numParticipants + 1)
         setLastAudioError(null)
         await room.startAudio().catch(() => {})
@@ -470,10 +500,20 @@ export function useLiveKitAudio({
             return
           }
 
-          setLastAudioError(errorInfo.message ?? 'Voice transport unavailable. Retrying...')
+          reconnectAttemptsRef.current += 1
+          if (reconnectAttemptsRef.current > maxReconnectAttempts) {
+            setLastAudioError('Voice transport unavailable. Please start LiveKit server and tap retry.')
+            return
+          }
+
+          const delayMs = Math.min(3000 * Math.pow(2, reconnectAttemptsRef.current - 1), 30000)
+          setLastAudioError(
+            errorInfo.message ??
+            `Voice transport unavailable. Retrying in ${Math.round(delayMs / 1000)}s...`,
+          )
           reconnectTimeoutRef.current = window.setTimeout(() => {
             connect().catch(() => {})
-          }, 3000)
+          }, delayMs)
         }
       }
     }
@@ -583,6 +623,7 @@ export function useLiveKitAudio({
   const retryConnection = useCallback(() => {
     setLastAudioError(null)
     setConnectionState('connecting')
+    reconnectAttemptsRef.current = 0
     setConnectNonce((value) => value + 1)
   }, [])
 

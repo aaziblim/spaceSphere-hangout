@@ -619,6 +619,7 @@ export default function StreamViewerPage() {
             ref={videoRef}
             autoPlay
             playsInline
+            controls
             muted={isHost || true}
             className="absolute inset-0 w-full h-full object-cover"
             style={{ opacity: stream.is_live ? 1 : 0.3 }}

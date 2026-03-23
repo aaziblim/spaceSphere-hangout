@@ -16,6 +16,7 @@ import ExploreCommunitiesPage from './pages/ExploreCommunitiesPage'
 import CreateCommunityPage from './pages/CreateCommunityPage'
 import StreamViewerPage from './pages/StreamViewerPage'
 import SpheresPage from './pages/SpheresPage'
+import SpheresSpacePage from './pages/SpheresSpacePage'
 import NotFoundPage from './pages/NotFoundPage'
 import SettingsPage from './pages/SettingsPage'
 import VerifyEmailPage from './pages/VerifyEmailPage'
@@ -44,6 +45,7 @@ function App() {
         <Route path="/c/:slug" element={<CommunityPage />} />
         <Route path="/communities/discover" element={<ExploreCommunitiesPage />} />
         <Route path="/communities/new" element={<CreateCommunityPage />} />
+        <Route path="/spheres" element={<SpheresSpacePage />} />
         <Route path="/reset-password" element={<Navigate to="/settings#security" replace />} />
         <Route path="/verify-email/:token" element={<VerifyEmailPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />

@@ -239,18 +239,15 @@ export default function CommunityPage() {
                         return (
                             <Link
                                 to={`/spheres/${community.slug}`}
-                                className="flex items-center gap-4 p-4 transition-colors hover:bg-[var(--bg-secondary)] group"
+                                className="flex items-center gap-4 p-4 transition-all hover:translate-x-[0.5px] group"
                                 style={{ borderBottom: '1px solid var(--border-light)' }}
                             >
                                 <div className="relative">
                                     <div
                                         className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-                                        style={{ background: 'var(--gradient-community)' }}
+                                        style={{ background: 'var(--gradient-stream)' }}
                                     >
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="var(--text-on-accent)" strokeWidth={2} className="w-5 h-5">
-                                            <circle cx="12" cy="12" r="10" />
-                                            <circle cx="12" cy="12" r="4" />
-                                        </svg>
+                                        <img src="/spheres-audio-icon.svg" alt="" className="w-6 h-6" />
                                     </div>
                                     <div className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full animate-sphere-pulse" style={{ backgroundColor: 'var(--success)' }}>
                                         <div className="absolute inset-0 rounded-full" style={{ backgroundColor: 'var(--success)', opacity: 0.4 }} />
@@ -258,7 +255,7 @@ export default function CommunityPage() {
                                 </div>
                                 <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2">
-                                        <p className="text-sm font-semibold group-hover:underline" style={{ color: 'var(--text-primary)' }}>Join Sphere</p>
+                                        <p className="text-sm font-semibold group-hover:underline" style={{ color: 'var(--text-primary)' }}>Enter Spheres</p>
                                         <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: 'var(--accent-alpha)', color: 'var(--accent)' }}>
                                             {sphereStatus?.participant_count} listening
                                         </span>
@@ -284,17 +281,14 @@ export default function CommunityPage() {
                                 <div className="relative">
                                     <div
                                         className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-                                        style={{ background: 'var(--gradient-community)' }}
+                                        style={{ background: 'var(--gradient-stream)' }}
                                     >
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="var(--text-on-accent)" strokeWidth={2} className="w-5 h-5">
-                                            <circle cx="12" cy="12" r="10" />
-                                            <circle cx="12" cy="12" r="4" />
-                                        </svg>
+                                        <img src="/spheres-audio-icon.svg" alt="" className="w-6 h-6" />
                                     </div>
                                     <div className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full animate-sphere-pulse" style={{ backgroundColor: 'var(--success)' }} />
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Sphere is Live</p>
+                                    <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Spheres are Live</p>
                                     <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
                                         {sphereStatus?.participant_count} listening
                                     </p>
@@ -303,13 +297,13 @@ export default function CommunityPage() {
                                     <button
                                         onClick={() => requestJoinMutation.mutate()}
                                         disabled={requestSent || requestJoinMutation.isPending}
-                                        className="px-4 py-2 text-xs font-semibold rounded-full transition-all active:scale-95 disabled:opacity-60"
+                                        className="px-4 py-2 text-xs font-semibold rounded-full transition-all active:scale-95 disabled:opacity-60 flex items-center gap-2"
                                         style={requestSent
                                             ? { backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-tertiary)' }
-                                            : { backgroundColor: 'var(--accent)', color: 'var(--text-on-accent)' }
+                                            : { background: 'var(--gradient-stream)', color: 'var(--text-on-accent)' }
                                         }
                                     >
-                                        {requestSent ? 'Request Sent' : 'Request to Join'}
+                                        {requestSent ? 'Request Sent' : 'Request to Join Spheres'}
                                     </button>
                                 )}
                             </div>
@@ -321,21 +315,18 @@ export default function CommunityPage() {
                         return (
                             <button
                                 onClick={() => setShowCreateModal(true)}
-                                className="w-full flex items-center gap-4 p-4 transition-colors hover:bg-[var(--bg-secondary)] group text-left"
+                                className="w-full flex items-center gap-4 p-4 transition-all hover:translate-x-[0.5px] group text-left"
                                 style={{ borderBottom: '1px solid var(--border-light)' }}
                             >
                                 <div
                                     className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-                                    style={{ background: 'var(--gradient-community)' }}
+                                    style={{ background: 'var(--gradient-stream)' }}
                                 >
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="var(--text-on-accent)" strokeWidth={2} className="w-5 h-5">
-                                        <circle cx="12" cy="12" r="10" />
-                                        <circle cx="12" cy="12" r="4" />
-                                    </svg>
+                                    <img src="/spheres-audio-icon.svg" alt="" className="w-6 h-6" />
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-semibold group-hover:underline" style={{ color: 'var(--text-primary)' }}>Start Sphere</p>
-                                    <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>Launch a live audio room for members</p>
+                                    <p className="text-sm font-semibold group-hover:underline" style={{ color: 'var(--text-primary)' }}>Start Spheres</p>
+                                    <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>Launch a live spatial audio room</p>
                                 </div>
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4 shrink-0" style={{ color: 'var(--text-tertiary)' }}>
                                     <path d="M9 18l6-6-6-6" />

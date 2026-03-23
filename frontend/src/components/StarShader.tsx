@@ -8,6 +8,9 @@ interface StarShaderProps {
   targetRadius: number
   yOffset?: number
   zOffset?: number
+  color1?: string
+  color2?: string
+  coronaColor?: string
 }
 
 const vertexShader = `
@@ -26,6 +29,7 @@ const fragmentShader = `
 uniform float uTime;
 uniform vec3 uColor1;
 uniform vec3 uColor2;
+uniform vec3 uCorona;
 varying vec2 vUv;
 varying vec3 vPosition;
 varying vec3 vNormal;
@@ -134,20 +138,30 @@ void main() {
   
   // Add corona ring around the edge
   float corona = pow(fresnel, 4.0) * 0.8;
-  color += vec3(1.0, 0.8, 0.3) * corona;
+  color += uCorona * corona;
   
   gl_FragColor = vec4(color * 1.5, 1.0);
 }
 `
 
-export function StarShader({ progressRef, focus, targetRadius, yOffset = 0, zOffset = 0 }: StarShaderProps) {
+export function StarShader({
+  progressRef,
+  focus,
+  targetRadius,
+  yOffset = 0,
+  zOffset = 0,
+  color1 = '#ff2a00',
+  color2 = '#ffc800',
+  coronaColor = '#fde68a',
+}: StarShaderProps) {
   const meshRef = useRef<THREE.Group>(null)
   const materialRef = useRef<THREE.ShaderMaterial>(null)
   
   const uniforms = useRef({
     uTime: { value: 0 },
-    uColor1: { value: new THREE.Color('#ff2a00') }, // Deep fiery red
-    uColor2: { value: new THREE.Color('#ffc800') }, // Bright sun yellow
+    uColor1: { value: new THREE.Color(color1) },
+    uColor2: { value: new THREE.Color(color2) },
+    uCorona: { value: new THREE.Color(coronaColor) },
   })
 
   useFrame(({ clock }) => {

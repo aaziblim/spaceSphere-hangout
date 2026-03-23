@@ -1,0 +1,13 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="audioGrad" x1="9" y1="8" x2="55" y2="56" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#5856D6"/>
+      <stop offset="1" stop-color="#11A39C"/>
+    </linearGradient>
+  </defs>
+  <circle cx="32" cy="32" r="24" fill="url(#audioGrad)"/>
+  <circle cx="32" cy="32" r="15" stroke="white" stroke-opacity="0.75" stroke-width="2"/>
+  <circle cx="32" cy="32" r="8" stroke="white" stroke-opacity="0.6" stroke-width="2"/>
+  <path d="M44 22C49 27 49 37 44 42" stroke="white" stroke-opacity="0.85" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M20 22C15 27 15 37 20 42" stroke="white" stroke-opacity="0.85" stroke-width="2.4" stroke-linecap="round"/>
+</svg>

@@ -199,7 +199,9 @@ export default function PostDetailPage() {
               <video 
                 src={post.post_video_url}
                 controls
-                className="w-full max-h-[70vh] object-cover"
+                playsInline
+                preload="metadata"
+                className="w-full max-h-[70vh] object-contain bg-black"
               />
             ) : post.post_image_url ? (
               <img 
@@ -211,10 +213,19 @@ export default function PostDetailPage() {
           </div>
         )}
 
-        {/* ===== BOTTOM: Actions, Title & Content ===== */}
+        {/* ===== BOTTOM: Title/Content then Actions ===== */}
         <div className="p-5">
+          {/* Title & Content */}
+          {post.title && (
+            <h1 className="text-xl font-bold mb-2 leading-tight" style={{ color: 'var(--text-primary)' }}>{post.title}</h1>
+          )}
+
+          <div className="text-[15px] leading-relaxed whitespace-pre-wrap break-words" style={{ color: 'var(--text-secondary)' }}>
+            {post.content}
+          </div>
+
           {/* Actions Row */}
-          <div className="flex items-center gap-0.5 mb-4">
+          <div className="flex items-center gap-0.5 mt-4">
             <button
               type="button"
               onClick={() => likeMutation.mutate()}
@@ -272,15 +283,6 @@ export default function PostDetailPage() {
                 <line x1="12" y1="2" x2="12" y2="15" />
               </svg>
             </button>
-          </div>
-
-          {/* Title & Content - Below Actions */}
-          {post.title && (
-            <h1 className="text-xl font-bold mb-2 leading-tight" style={{ color: 'var(--text-primary)' }}>{post.title}</h1>
-          )}
-
-          <div className="text-[15px] leading-relaxed whitespace-pre-wrap break-words" style={{ color: 'var(--text-secondary)' }}>
-            {post.content}
           </div>
         </div>
       </div>

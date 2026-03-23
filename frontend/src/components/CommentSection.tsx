@@ -35,7 +35,7 @@ interface CommentItemProps {
   currentUser: User | null
   depth?: number
   onReply: (parentId: number, username: string) => void
-  isReplying: boolean
+  replyingToId: number | null
   onSubmitReply: (content: string, parentId: number) => void
   onCancelReply: () => void
   replyPending: boolean
@@ -115,7 +115,7 @@ function CommentItem({
   currentUser,
   depth = 0,
   onReply,
-  isReplying,
+  replyingToId,
   onSubmitReply,
   onCancelReply,
   replyPending
@@ -124,12 +124,13 @@ function CommentItem({
   const [replyContent, setReplyContent] = useState('')
   const [likeAnimating, setLikeAnimating] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const isReplyingNow = replyingToId === comment.id
 
   useEffect(() => {
-    if (isReplying && textareaRef.current) {
+    if (isReplyingNow && textareaRef.current) {
       textareaRef.current.focus()
     }
-  }, [isReplying])
+  }, [isReplyingNow])
 
   const likeMutation = useMutation({
     mutationFn: () => likeComment(comment.id),
@@ -277,7 +278,7 @@ function CommentItem({
         </div>
 
         {/* Inline reply form */}
-        {isReplying && (
+        {isReplyingNow && (
           <form onSubmit={handleSubmitReply} className="mt-3">
             <div
               className="rounded-xl overflow-hidden transition-all focus-within:ring-2"
@@ -325,7 +326,7 @@ function CommentItem({
                 currentUser={currentUser}
                 depth={depth + 1}
                 onReply={onReply}
-                isReplying={false}
+                replyingToId={replyingToId}
                 onSubmitReply={onSubmitReply}
                 onCancelReply={onCancelReply}
                 replyPending={replyPending}
@@ -547,7 +548,7 @@ export default function CommentSection({ postId, currentUser }: CommentSectionPr
               postId={postId}
               currentUser={currentUser}
               onReply={(id, username) => setReplyingTo({ id, username })}
-              isReplying={replyingTo?.id === comment.id}
+              replyingToId={replyingTo?.id ?? null}
               onSubmitReply={handleReply}
               onCancelReply={() => setReplyingTo(null)}
               replyPending={createMutation.isPending}

@@ -9,6 +9,26 @@ import ActiveStreamsCarousel from '../components/ActiveStreamsCarousel'
 import type { Paginated, Post } from '../types'
 
 type FilterTab = 'foryou' | 'fresh' | 'hot' | 'saved'
+const FEED_CACHE_KEY = 'homeFeedCacheV1'
+
+function readCachedFeed(): Post[] {
+  try {
+    const raw = localStorage.getItem(FEED_CACHE_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw) as Post[]
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+function writeCachedFeed(posts: Post[]) {
+  try {
+    localStorage.setItem(FEED_CACHE_KEY, JSON.stringify(posts.slice(0, 120)))
+  } catch {
+    // no-op
+  }
+}
 
 export default function HomePage() {
   const { user } = useAuth()
@@ -97,26 +117,34 @@ export default function HomePage() {
   }, [handleObserver])
 
   const posts = data?.pages.flatMap(p => p.results) ?? []
+  const cachedPosts = useMemo(() => readCachedFeed(), [])
+  const effectivePosts = posts.length > 0 ? posts : (isError ? cachedPosts : posts)
   const sortOrderRef = useRef<{ tab: FilterTab; order: number[] } | null>(null)
 
+  useEffect(() => {
+    if (posts.length > 0) {
+      writeCachedFeed(posts)
+    }
+  }, [posts])
+
   const sortedPosts = useMemo(() => {
-    if (!posts.length) return []
+    if (!effectivePosts.length) return []
     if (activeTab === 'saved') {
       const currentSaved = getSavedPosts()
-      return posts.filter(p => currentSaved.has(p.public_id || String(p.id)))
+      return effectivePosts.filter(p => currentSaved.has(p.public_id || String(p.id)))
         .sort((a, b) => new Date(b.date_posted).getTime() - new Date(a.date_posted).getTime())
     }
 
-    const currentPostIds = posts.map(p => p.id).sort((a, b) => a - b).join(',')
+    const currentPostIds = effectivePosts.map(p => p.id).sort((a, b) => a - b).join(',')
     const cachedPostIds = sortOrderRef.current?.order?.slice().sort((a, b) => a - b).join(',')
     const needsResort = sortOrderRef.current?.tab !== activeTab || currentPostIds !== cachedPostIds
 
     if (!needsResort && sortOrderRef.current) {
-      const postsMap = new Map(posts.map(p => [p.id, p]))
+      const postsMap = new Map(effectivePosts.map(p => [p.id, p]))
       return sortOrderRef.current.order.map(id => postsMap.get(id)).filter((p): p is Post => p !== undefined)
     }
 
-    const sorted = [...posts].sort((a, b) => {
+    const sorted = [...effectivePosts].sort((a, b) => {
       if (activeTab === 'hot') {
         return getHotScore(b) - getHotScore(a)
       }
@@ -128,7 +156,7 @@ export default function HomePage() {
 
     sortOrderRef.current = { tab: activeTab, order: sorted.map(p => p.id) }
     return sorted
-  }, [posts, activeTab])
+  }, [effectivePosts, activeTab])
 
   const savedCount = useMemo(() => getSavedPosts().size, [activeTab])
 
@@ -139,7 +167,9 @@ export default function HomePage() {
     { key: 'saved', label: 'Saved', icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" /></svg>, badge: savedCount > 0 ? savedCount : undefined },
   ]
 
-  if (isError) return <div className="p-8 text-center text-red-500">Failed to load posts.</div>
+  if (isError && cachedPosts.length === 0) {
+    return <div className="p-8 text-center text-red-500">Failed to load posts.</div>
+  }
 
   return (
     <div className="w-full">
@@ -147,6 +177,14 @@ export default function HomePage() {
       <ActiveStreamsCarousel />
 
       <div className="mb-6">
+        {isError && cachedPosts.length > 0 && (
+          <div
+            className="mb-3 px-4 py-2 rounded-xl text-xs font-medium"
+            style={{ backgroundColor: 'var(--warning-alpha)', color: 'var(--warning)' }}
+          >
+            Connection issue. Showing last available feed.
+          </div>
+        )}
         <div className="flex items-center justify-between mb-4 py-3 px-4 rounded-2xl transition-all" style={{ backgroundColor: 'var(--bg-primary)', boxShadow: 'var(--card-shadow)' }}>
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ backgroundColor: 'var(--accent-alpha)', color: 'var(--accent)' }}>
@@ -180,6 +218,46 @@ export default function HomePage() {
       </div>
 
       <div className="space-y-6">
+        {/* Featured: Spheres (spatial audio) */}
+        <div
+          className="rounded-3xl p-5"
+          style={{ backgroundColor: 'var(--bg-primary)', boxShadow: 'var(--card-shadow)' }}
+        >
+          <div className="flex items-center gap-4 mb-2">
+            <div
+              className="w-12 h-12 rounded-2xl flex items-center justify-center"
+              style={{ background: 'var(--gradient-stream)' }}
+            >
+              <img src="/spheres-audio-icon.svg" alt="" className="w-7 h-7" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                Spheres
+              </p>
+              <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                Spatial audio rooms where position matters
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 mt-4">
+            <Link
+              to={user ? '/spheres' : '/login'}
+              className="px-4 py-2.5 rounded-full text-sm font-semibold transition-all active:scale-[0.98]"
+              style={{ background: 'var(--accent)', color: 'var(--text-on-accent)' }}
+            >
+              Enter Spheres
+            </Link>
+            <Link
+              to="/communities/discover"
+              className="px-4 py-2.5 rounded-full text-sm font-semibold transition-all active:scale-[0.98]"
+              style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}
+            >
+              Discover Communities
+            </Link>
+          </div>
+        </div>
+
         {sortedPosts.map(post => (
           <PostCard
             key={post.id}

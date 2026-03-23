@@ -214,13 +214,25 @@ export default function PostCard({
             {(post.post_image_url || post.post_video_url) && (
                 <Link to={`/posts/${post.slug || post.public_id || post.id}`} className="block relative overflow-hidden" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
                     {post.post_video_url ? (
-                        <video src={post.post_video_url} muted loop playsInline onMouseEnter={e => e.currentTarget.play()} onMouseLeave={e => { e.currentTarget.pause(); e.currentTarget.currentTime = 0 }} className="w-full max-h-[520px] object-cover" />
+                        <video
+                            src={post.post_video_url}
+                            controls
+                            muted
+                            playsInline
+                            preload="metadata"
+                            className="w-full max-h-[520px] object-cover"
+                        />
                     ) : <img src={post.post_image_url!} alt="" className="w-full max-h-[520px] object-cover transition-transform duration-500 group-hover:scale-[1.02]" />}
                 </Link>
             )}
 
             <div className="p-4 pt-3">
-                <div className="flex items-center gap-0.5 mb-3">
+                <Link to={`/posts/${post.slug || post.public_id || post.id}`}>
+                    <h2 className="text-[17px] font-bold mb-1.5 hover:underline leading-tight" style={{ color: 'var(--text-primary)' }}>{post.title}</h2>
+                    <p className="text-[15px] leading-relaxed line-clamp-3" style={{ color: 'var(--text-secondary)' }}>{post.content}</p>
+                </Link>
+
+                <div className="flex items-center gap-0.5 mt-3">
                     <button onClick={handleLikeClick} aria-label="Like" className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all hover:scale-105 ${likeAnim ? 'animate-heartBeat' : ''}`} style={{ backgroundColor: post.user_has_liked ? 'var(--accent-alpha)' : 'transparent', color: post.user_has_liked ? 'var(--accent)' : 'var(--text-secondary)', opacity: !isAuthenticated || liking || disliking ? 0.5 : 1 }}>
                         <svg viewBox="0 0 24 24" fill={post.user_has_liked ? "currentColor" : "none"} stroke="currentColor" strokeWidth={1.5} className="w-5 h-5">
                             <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
@@ -297,11 +309,6 @@ export default function PostCard({
                         {shareToast && <div className="absolute bottom-full right-0 mb-2 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap bg-gray-800 text-white shadow-xl animate-fade-in">{shareToast}</div>}
                     </button>
                 </div>
-
-                <Link to={`/posts/${post.slug || post.public_id || post.id}`}>
-                    <h2 className="text-[17px] font-bold mb-1.5 hover:underline leading-tight" style={{ color: 'var(--text-primary)' }}>{post.title}</h2>
-                    <p className="text-[15px] leading-relaxed line-clamp-3" style={{ color: 'var(--text-secondary)' }}>{post.content}</p>
-                </Link>
             </div>
         </article>
     )

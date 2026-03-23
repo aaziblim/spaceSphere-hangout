@@ -7,7 +7,21 @@ import { ThemeProvider } from './ThemeContext'
 import './index.css'
 import App from './App'
 
-const queryClient = new QueryClient()
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      // Keep last successful data visible during transient/server outages.
+      staleTime: 60_000,
+      gcTime: 24 * 60 * 60 * 1000,
+      retry: 1,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: true,
+    },
+    mutations: {
+      retry: 0,
+    },
+  },
+})
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
